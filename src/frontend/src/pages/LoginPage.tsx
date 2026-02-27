@@ -35,7 +35,6 @@ export function LoginPage() {
   const [workerLocation, setWorkerLocation] = useState("");
   const [workerBio, setWorkerBio] = useState("");
   const [workerVideoFile, setWorkerVideoFile] = useState<File | null>(null);
-  const [workerVideoUrl, setWorkerVideoUrl] = useState<string>("");
   const [workerLoading, setWorkerLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,9 +42,8 @@ export function LoginPage() {
   function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
+    // Store only the file metadata for display — blob URLs cannot be passed to ICP backend
     setWorkerVideoFile(file);
-    setWorkerVideoUrl(url);
   }
 
   async function handleCitizenSubmit(e: React.FormEvent) {
@@ -94,9 +92,15 @@ export function LoginPage() {
     }
     setWorkerLoading(true);
     try {
-      const videoURL =
-        workerVideoUrl ||
-        "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4";
+      // Always use a stable sample URL — blob:// URLs cannot be serialized by ICP.
+      // The file selection is UI-only for demo purposes.
+      const videoURL = "https://www.w3schools.com/html/mov_bbb.mp4";
+      console.log("Registering worker:", {
+        name: workerName.trim(),
+        skill: workerSkill,
+        location: workerLocation.trim(),
+        videoURL,
+      });
       const id = await actor.registerWorker(
         workerName.trim(),
         workerSkill,
@@ -104,6 +108,11 @@ export function LoginPage() {
         workerBio.trim(),
         videoURL,
       );
+      console.log("Worker registered successfully, id:", id);
+      // Store video filename separately so dashboard can display it
+      if (workerVideoFile?.name) {
+        localStorage.setItem("knot_worker_video", workerVideoFile.name);
+      }
       setAuthUser({
         role: "worker",
         id,
@@ -115,7 +124,7 @@ export function LoginPage() {
       );
       navigate({ to: "/worker-dashboard" });
     } catch (err) {
-      console.error(err);
+      console.error("Registration error:", err);
       toast.error(t("error_registration_failed"));
     } finally {
       setWorkerLoading(false);
@@ -363,7 +372,6 @@ export function LoginPage() {
                           type="button"
                           onClick={() => {
                             setWorkerVideoFile(null);
-                            setWorkerVideoUrl("");
                           }}
                           className="text-green-600 hover:text-green-800 text-xs font-body underline"
                         >
