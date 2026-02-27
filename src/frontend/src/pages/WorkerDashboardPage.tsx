@@ -113,7 +113,20 @@ export function WorkerDashboardPage() {
   const badgeLevelDisplay = workerData?.badgeLevel ?? "—";
   const trustScore = workerData ? Number(workerData.trustScore) : 0;
   const endorsementCount = workerData ? Number(workerData.endorsementCount) : 0;
-  const videoURL = workerData?.videoURL ?? "";
+
+  // Always prefer the locally-uploaded video preview (blob URL stored at registration time)
+  // Fall back to backend URL only if no local preview exists
+  const DUMMY_VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
+  const localPreviewUrl =
+    typeof window !== "undefined"
+      ? (localStorage.getItem("knot_worker_video_preview_url") ?? "")
+      : "";
+  const backendVideoUrl = workerData?.videoURL ?? "";
+  const videoURL =
+    localPreviewUrl ||
+    (backendVideoUrl && backendVideoUrl !== DUMMY_VIDEO_URL
+      ? backendVideoUrl
+      : "");
 
   return (
     <main className="flex-1 bg-background">
@@ -270,20 +283,6 @@ export function WorkerDashboardPage() {
               </CardContent>
             </Card>
           )}
-
-          {/* Always-visible certificate access */}
-          <div className="mt-3">
-            <Link to="/certificate">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2 font-body w-full sm:w-auto border-amber-300 text-amber-700 hover:bg-amber-50"
-              >
-                <Award className="w-4 h-4" />
-                View My Certificate
-              </Button>
-            </Link>
-          </div>
         </section>
 
         <Separator />

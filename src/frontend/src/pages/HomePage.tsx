@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -5,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Award, MapPin, TrendingUp, Users } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Award, MapPin, RefreshCw, TrendingUp, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CardSkeletonGrid } from "../components/CardSkeleton";
 import { UserCard } from "../components/UserCard";
@@ -33,7 +35,7 @@ export function HomePage() {
     isCitizen ? "10" : "all",
   );
 
-  const { data: users, isLoading, isError } = useAllUsers();
+  const { data: users, isLoading, isError, refetch } = useAllUsers();
 
   const filteredUsers = useMemo(() => {
     if (!users) return [];
@@ -231,24 +233,65 @@ export function HomePage() {
         {isLoading || (!users && !isError) ? (
           <CardSkeletonGrid count={6} />
         ) : isError ? (
-          <div className="text-center py-20">
+          <div className="text-center py-20 animate-fade-in">
             <div className="text-5xl mb-4">⚠️</div>
             <h3 className="font-display font-semibold text-foreground text-xl mb-2">
               {t("error_load_professionals")}
             </h3>
-            <p className="text-muted-foreground font-body text-sm">
+            <p className="text-muted-foreground font-body text-sm mb-6">
               {t("error_something_wrong")}
             </p>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              className="font-body gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </Button>
+          </div>
+        ) : users &&
+          users.length === 0 &&
+          !searchQuery.trim() &&
+          selectedSkill === "All" &&
+          selectedDistance === "all" ? (
+          // No workers have registered yet
+          <div className="text-center py-20 animate-fade-in">
+            <div className="text-6xl mb-4">🏗️</div>
+            <h3 className="font-display font-semibold text-foreground text-xl mb-2">
+              No professionals registered yet
+            </h3>
+            <p className="text-muted-foreground font-body text-sm mb-6 max-w-xs mx-auto">
+              Workers who register on KNOT will appear here.
+            </p>
+            <Link to="/login">
+              <Button className="font-body bg-amber-600 hover:bg-amber-700 text-white gap-2">
+                Register as Worker
+              </Button>
+            </Link>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="text-center py-20 animate-fade-in">
             <div className="text-6xl mb-4">🔍</div>
             <h3 className="font-display font-semibold text-foreground text-xl mb-2">
-              {t("error_no_professionals")}
+              {searchQuery.trim()
+                ? `No workers found for "${searchQuery}"`
+                : t("error_no_professionals")}
             </h3>
-            <p className="text-muted-foreground font-body text-sm max-w-xs mx-auto">
-              {t("error_adjust_filters")}
+            <p className="text-muted-foreground font-body text-sm max-w-xs mx-auto mb-4">
+              {searchQuery.trim()
+                ? "Try a different name or skill name."
+                : t("error_adjust_filters")}
             </p>
+            {searchQuery.trim() && (
+              <Button
+                variant="outline"
+                onClick={() => setSearchQuery("")}
+                className="font-body text-sm"
+              >
+                Clear search
+              </Button>
+            )}
           </div>
         ) : (
           <>
@@ -269,10 +312,28 @@ export function HomePage() {
                     </span>
                   </span>
                 )}
+                {selectedDistance !== "all" && (
+                  <span>
+                    {" "}
+                    <span className="text-foreground font-semibold">
+                      within {selectedDistance}km
+                    </span>
+                  </span>
+                )}
               </p>
-              <p className="text-muted-foreground text-xs font-body hidden sm:block">
-                {t("filter_sorted_trust")}
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-muted-foreground text-xs font-body hidden sm:block">
+                  {t("filter_sorted_trust")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredUsers.map((user, index) => (

@@ -443,10 +443,20 @@ export function CertificationTestPage() {
   const navigate = useNavigate();
   const authUser = getAuthUser();
   const { actor } = useActor();
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   const skill = authUser?.skill ?? "General";
   const bank = getQuestionBank(skill);
+
+  // Map language codes to display names for the active language label
+  const LANG_NAMES: Record<string, string> = {
+    en: "English",
+    te: "తెలుగు",
+    hi: "हिन्दी",
+    ml: "മലയാളം",
+    kn: "ಕನ್ನಡ",
+  };
+  const langDisplayName = LANG_NAMES[lang] ?? "English";
 
   const [phase, setPhase] = useState<TestPhase>("intro");
   const [currentQ, setCurrentQ] = useState(0); // 0-8 for MCQ
@@ -498,15 +508,27 @@ export function CertificationTestPage() {
     // Simulate evaluation delay
     await new Promise((res) => setTimeout(res, 2500));
 
-    // Demo: always pass with 7/9
-    const mcqScore = 7;
-    const practicalPassed = true;
+    // Count correct answers based on actual user responses (null = unanswered = wrong)
+    const mcqScore = answers.reduce<number>((count, answer, idx) => {
+      return (
+        count +
+        (answer !== null && answer === bank.mcq[idx].correctIndex ? 1 : 0)
+      );
+    }, 0);
+    const practicalPassed = true; // Any uploaded video is accepted
     const passed = mcqScore >= 6 && practicalPassed;
 
     try {
       await submitMutation.mutateAsync({ mcqScore, practicalPassed });
     } catch {
       // Continue even if backend fails (demo mode)
+    }
+
+    // Persist pass status to localStorage so Navbar and CertificatePage can read it
+    if (passed) {
+      localStorage.setItem("knot_cert_passed", "true");
+    } else {
+      localStorage.removeItem("knot_cert_passed");
     }
 
     setResult({ mcqScore, practicalPassed, passed });
@@ -520,10 +542,10 @@ export function CertificationTestPage() {
           <CardContent className="py-12 text-center">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
             <p className="font-display font-semibold text-foreground">
-              Workers only
+              {t("cert_take_test")}
             </p>
             <Button className="mt-4" onClick={() => navigate({ to: "/login" })}>
-              Go to Login
+              {t("nav_login")}
             </Button>
           </CardContent>
         </Card>
@@ -598,7 +620,10 @@ export function CertificationTestPage() {
                     {t("cert_test_intro_title")}
                   </h1>
                   <p className="text-white/70 font-body text-sm">
-                    {skill} — Basic Level
+                    {skill} — {t("cert_basic_level")}
+                  </p>
+                  <p className="text-white/50 font-body text-xs mt-1">
+                    🌐 {langDisplayName}
                   </p>
                 </div>
                 <CardContent className="p-8">
@@ -610,15 +635,19 @@ export function CertificationTestPage() {
                     {[
                       {
                         icon: "📋",
-                        label: "9 Scenario MCQs",
-                        sub: "Read & answer",
+                        label: "9 MCQs",
+                        sub: t("cert_next"),
                       },
                       {
                         icon: "🔧",
-                        label: "1 Practical",
-                        sub: "Upload your video",
+                        label: t("cert_practical_title"),
+                        sub: t("cert_practical_upload"),
                       },
-                      { icon: "🏆", label: "Pass: 6/9+", sub: "Get certified" },
+                      {
+                        icon: "🏆",
+                        label: "6/9+",
+                        sub: t("cert_view_cert"),
+                      },
                     ].map((item) => (
                       <div
                         key={item.label}
@@ -662,9 +691,14 @@ export function CertificationTestPage() {
                   <span className="font-body text-sm text-muted-foreground">
                     {t("cert_question_of").replace("{n}", String(currentQ + 1))}
                   </span>
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-body font-semibold">
-                    MCQ
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-body">
+                      🌐 {skill} — {langDisplayName}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-body font-semibold">
+                      MCQ
+                    </span>
+                  </div>
                 </div>
 
                 {/* Scenario ad card */}
@@ -740,7 +774,7 @@ export function CertificationTestPage() {
                         })()}
                       </span>
                       <span className="text-white/90 font-body text-sm font-semibold tracking-wide uppercase bg-black/20 px-4 py-1 rounded-full">
-                        Study this scenario
+                        {t("cert_test_intro_desc").split(".")[0]}
                       </span>
                     </div>
                   </div>
@@ -772,7 +806,7 @@ export function CertificationTestPage() {
                   disabled={answers[currentQ] === null}
                   onClick={handleNext}
                 >
-                  {currentQ < 8 ? t("cert_next") : "Go to Practical Question"}
+                  {currentQ < 8 ? t("cert_next") : t("cert_practical_title")}
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -837,7 +871,7 @@ export function CertificationTestPage() {
                               </p>
                               <p className="font-body text-xs text-muted-foreground mt-0.5">
                                 {(practicalFile.size / 1024 / 1024).toFixed(1)}{" "}
-                                MB — Ready to submit
+                                MB — {t("cert_submit")}
                               </p>
                             </div>
                             <CheckCircle2 className="w-5 h-5 text-primary" />
@@ -849,10 +883,10 @@ export function CertificationTestPage() {
                             </div>
                             <div>
                               <p className="font-body font-semibold text-sm text-foreground">
-                                Click to upload your practical video
+                                {t("cert_practical_upload")}
                               </p>
                               <p className="font-body text-xs text-muted-foreground mt-1">
-                                MP4, MOV up to 500MB
+                                {t("login_video_formats")}
                               </p>
                             </div>
                           </div>
@@ -902,8 +936,7 @@ export function CertificationTestPage() {
                       {t("cert_evaluating")}
                     </h2>
                     <p className="font-body text-muted-foreground text-sm">
-                      Please wait while we review your answers and practical
-                      video...
+                      {t("cert_test_intro_desc")}
                     </p>
                   </div>
                   <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -979,7 +1012,7 @@ export function CertificationTestPage() {
                       >
                         {result.practicalPassed
                           ? t("cert_practical_accepted")
-                          : "Needs Review"}
+                          : t("cert_failed")}
                       </p>
                     </div>
                   </div>
@@ -987,8 +1020,8 @@ export function CertificationTestPage() {
                   {/* Progress bar for MCQ */}
                   <div>
                     <div className="flex justify-between font-body text-xs text-muted-foreground mb-2">
-                      <span>MCQ Performance</span>
-                      <span>{result.mcqScore}/9 correct</span>
+                      <span>{t("cert_score_label")}</span>
+                      <span>{result.mcqScore}/9</span>
                     </div>
                     <Progress
                       value={(result.mcqScore / 9) * 100}
@@ -1010,7 +1043,7 @@ export function CertificationTestPage() {
                         className="w-full font-body"
                         onClick={() => navigate({ to: "/worker-dashboard" })}
                       >
-                        Back to Dashboard
+                        {t("cert_go_dashboard")}
                       </Button>
                     </div>
                   ) : (

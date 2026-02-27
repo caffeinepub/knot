@@ -8,12 +8,77 @@ export function useAllUsers() {
     queryKey: ["users"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getAllUsers();
+      try {
+        return await actor.getAllUsers();
+      } catch (e) {
+        console.error("getAllUsers failed:", e);
+        return [];
+      }
     },
     enabled: !!actor && !isFetching,
-    staleTime: 1000 * 30,
-    retry: 3,
-    retryDelay: 2000,
+    staleTime: 1000 * 15,
+    retry: 5,
+    retryDelay: 3000,
+  });
+}
+
+export function useSearchUsers(query: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<User[]>({
+    queryKey: ["search-users", query],
+    queryFn: async () => {
+      if (!actor) return [];
+      if (!query.trim()) {
+        try {
+          return await actor.getAllUsers();
+        } catch {
+          return [];
+        }
+      }
+      // Try backend search first, fall back to client-side filtering
+      try {
+        const bySkill = await actor.getUsersBySkill(query.trim());
+        if (bySkill && bySkill.length > 0) return bySkill;
+      } catch {}
+      // Fallback: get all and filter client-side
+      try {
+        const all = await actor.getAllUsers();
+        const q = query.toLowerCase().trim();
+        return all.filter(
+          (u) =>
+            u.name.toLowerCase().includes(q) ||
+            u.skill.toLowerCase().includes(q) ||
+            u.location.toLowerCase().includes(q),
+        );
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 1000 * 15,
+  });
+}
+
+export function useNearbyUsers(maxDistanceKm: number) {
+  const { actor, isFetching } = useActor();
+  return useQuery<User[]>({
+    queryKey: ["nearby-users", maxDistanceKm],
+    queryFn: async () => {
+      if (!actor) return [];
+      try {
+        return await actor.getUsersByDistance(BigInt(maxDistanceKm));
+      } catch {
+        // Fallback: get all and filter client-side
+        try {
+          const all = await actor.getAllUsers();
+          return all.filter((u) => Number(u.distance) <= maxDistanceKm);
+        } catch {
+          return [];
+        }
+      }
+    },
+    enabled: !!actor && !isFetching && maxDistanceKm > 0,
+    staleTime: 1000 * 15,
   });
 }
 

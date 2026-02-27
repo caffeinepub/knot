@@ -89,6 +89,47 @@ export function CertificatePage() {
     );
   }
 
+  // Block access if assessment not passed
+  // Also check localStorage (set by CertificationTestPage on submit)
+  const localPassed =
+    typeof window !== "undefined" &&
+    localStorage.getItem("knot_cert_passed") === "true";
+  if (!cert?.passed && !localPassed) {
+    return (
+      <main className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center max-w-sm">
+          <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-5">
+            <Award className="w-10 h-10 text-amber-500" />
+          </div>
+          <h2 className="font-display font-bold text-xl text-foreground mb-2">
+            Certificate Not Unlocked Yet
+          </h2>
+          <p className="font-body text-muted-foreground text-sm mb-6 leading-relaxed">
+            You need to pass the peer validation assessment to earn your
+            certificate. Score 6 or more on the MCQ questions and submit your
+            practical video.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={() => navigate({ to: "/certification-test" })}
+              className="gap-2 font-body font-semibold"
+            >
+              <Shield className="w-4 h-4" />
+              Take the Assessment
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate({ to: "/worker-dashboard" })}
+              className="font-body"
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 bg-background">
       {/* Print-only styles */}

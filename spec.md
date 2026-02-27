@@ -1,26 +1,39 @@
-# KNOT
+# KNOT - SkillReel
 
 ## Current State
-Full-stack vocational skills platform with Motoko backend and React frontend. Features: dual login (citizen/worker), worker registration with skill/bio/video, home feed, profile pages, community pages, certification test, certificate display, multilingual support (5 languages), voice search, notifications, nearby filter, endorsements (worker-only), learning requests, badge system.
+Full-stack vocational worker platform. Workers register with name, skill, location, bio, video. Citizens search for workers. Features: endorsements, certifications, learning requests, community pages, multilingual support (EN/TE/HI/ML/KN), voice search, notifications, nearby filter.
 
-**Known bug**: Registration (both citizen and worker) fails with "Registration failed. Please try again." error because the `actor` from `useActor` hook is `null` when the form is submitted -- the ICP actor takes a moment to initialize asynchronously, but the form doesn't wait for it.
+Backend uses `var users` (non-stable) which resets on canister upgrades. Pre-seed data of 10 fake workers was used. The `getAllUsers` call fails in some browser environments causing "Unable to load professionals" error. Search is client-side only on loaded data.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Loading state on login page that blocks form submission until actor is ready
-- Auto-retry mechanism: when actor is null on submit, wait up to 5 seconds for it to become available before showing error
-- Visual indicator on login page showing "Connecting to network..." when actor is initializing
+- `stable var` for all storage (users, citizens, learningRequests, certificationResults, counters) so data persists across upgrades
+- `contactNumber: Text` field in User type
+- `searchUsers(query: Text)` backend function - case-insensitive partial match on name, skill, location - returns sorted results
+- `searchNearby(skill: Text, maxDistance: Nat)` backend function - filter by skill + distance, sorted by rank
+- `registerWorkerFull(name, skill, location, bio, videoURL, contactNumber)` function
+- `getWorkerCount()` function
+- Frontend: contact number input in worker registration form
+- Frontend: search now calls backend `searchUsers` API with debounce for real-time results
+- Frontend: nearby filter calls `searchNearby` backend API
+- Frontend: stats on homepage load from real worker count
 
 ### Modify
-- `LoginPage.tsx`: replace immediate `actor` null check with a wait/retry loop that polls for the actor up to 5 times with 1-second delays before giving up
-- Both `handleCitizenSubmit` and `handleWorkerSubmit` should use the retry approach
-- Disable submit buttons while actor is still loading (show spinner + "Connecting..." text)
+- Remove ALL hardcoded/seed fake worker data from backend - start with empty `users = []`
+- `getAllUsers` uses `Array.sort` instead of `.sort()` for compatibility
+- `getUsersBySkill` uses case-insensitive matching
+- All array operations use `Array.filter`, `Array.map`, `Array.append`, `Array.find` instead of method syntax
+- Frontend `useQueries.ts`: add `useSearchUsers` and `useSearchNearby` hooks
+- Frontend `HomePage.tsx`: wire search bar to backend search, show empty state with "Register as worker to appear here" message when no workers
 
 ### Remove
-- Nothing removed
+- All 10 hardcoded seed workers from backend
+- Client-side-only filtering (replace with backend queries where appropriate)
 
 ## Implementation Plan
-1. Update `LoginPage.tsx` to add actor polling/retry logic in both submit handlers
-2. Add loading indicator when actor is initializing (disable buttons with "Connecting..." state)
-3. The actor is available via `useActor()` which returns `{ actor, isFetching }` -- use `isFetching` to show connecting state on buttons
+1. Generate new Motoko backend with stable storage, searchUsers, searchNearby, contactNumber field, no seed data
+2. Update frontend hooks to add useSearchUsers and useSearchNearby
+3. Update HomePage to use backend search with debounce
+4. Update LoginPage worker registration form to include optional contact number field
+5. Update UserCard to show contact number for citizen view

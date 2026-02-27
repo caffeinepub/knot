@@ -25,9 +25,10 @@ import {
   Star,
   ThumbsUp,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLang } from "../contexts/LanguageContext";
+import { useNotifications } from "../contexts/NotificationsContext";
 import {
   useEndorseUser,
   useSubmitLearningRequest,
@@ -53,6 +54,7 @@ export function ProfilePage() {
   const { t } = useLang();
   const authUser = getAuthUser();
   const isCitizen = authUser?.role === "citizen";
+  const { addNotification } = useNotifications();
 
   const { data: user, isLoading, isError, refetch } = useUser(userId);
   const endorseMutation = useEndorseUser();
@@ -63,6 +65,14 @@ export function ProfilePage() {
   const [learnMessage, setLearnMessage] = useState("");
   const [endorsed, setEndorsed] = useState(false);
 
+  // Fire a profile_view notification whenever someone opens a worker's profile
+  useEffect(() => {
+    addNotification({
+      type: "profile_view",
+      message: "Someone viewed your profile",
+    });
+  }, [addNotification]);
+
   async function handleEndorse() {
     if (!userId) return;
     try {
@@ -70,6 +80,11 @@ export function ProfilePage() {
       setEndorsed(true);
       await refetch();
       toast.success(t("success_endorsed"));
+      // Fire real-time endorsement notification
+      addNotification({
+        type: "endorsement",
+        message: "Someone endorsed your profile",
+      });
     } catch {
       toast.error(t("error_endorse_failed"));
     }
@@ -93,6 +108,11 @@ export function ProfilePage() {
       });
       toast.success(t("success_request_sent"));
       setLearnModalOpen(false);
+      // Fire real-time learning request notification
+      addNotification({
+        type: "learning_request",
+        message: `${requesterName.trim()} sent you a learning request`,
+      });
       setRequesterName("");
       setLearnMessage("");
     } catch {

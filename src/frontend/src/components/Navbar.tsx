@@ -70,6 +70,9 @@ export function Navbar() {
   }
 
   const recentNotifs = notifications.slice(0, 5);
+  const hasCertPassed =
+    typeof window !== "undefined" &&
+    localStorage.getItem("knot_cert_passed") === "true";
 
   return (
     <header className="sticky top-0 z-50 bg-navy shadow-navy">
@@ -285,7 +288,7 @@ export function Navbar() {
                     </Button>
                   </Link>
                 )}
-                {authUser.role === "worker" && (
+                {authUser.role === "worker" && hasCertPassed && (
                   <Link to="/certificate">
                     <Button
                       variant="ghost"
@@ -486,7 +489,7 @@ export function Navbar() {
                       {t("nav_my_dashboard")}
                     </Link>
                   )}
-                  {authUser.role === "worker" && (
+                  {authUser.role === "worker" && hasCertPassed && (
                     <Link
                       to="/certificate"
                       onClick={() => setMobileOpen(false)}
