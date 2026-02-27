@@ -64,10 +64,11 @@ export const idlService = IDL.Service({
   'init' : IDL.Func([], [], []),
   'registerCitizen' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
   'registerWorker' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
       [IDL.Nat],
       [],
     ),
+  'searchUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
   'submitLearningRequest' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
   'submitTestResult' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Bool], [IDL.Bool], []),
 });
@@ -131,10 +132,11 @@ export const idlFactory = ({ IDL }) => {
     'init' : IDL.Func([], [], []),
     'registerCitizen' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
     'registerWorker' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
         [IDL.Nat],
         [],
       ),
+    'searchUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
     'submitLearningRequest' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
     'submitTestResult' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Bool], [IDL.Bool], []),
   });

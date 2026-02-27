@@ -13,7 +13,11 @@ import { CardSkeletonGrid } from "../components/CardSkeleton";
 import { UserCard } from "../components/UserCard";
 import { VoiceSearch } from "../components/VoiceSearch";
 import { useLang } from "../contexts/LanguageContext";
-import { useAllUsers } from "../hooks/useQueries";
+import {
+  useAllUsers,
+  useNearbyUsers,
+  useSearchUsers,
+} from "../hooks/useQueries";
 import { getAuthUser } from "../utils/auth";
 import {
   DISTANCE_OPTIONS,
@@ -35,36 +39,59 @@ export function HomePage() {
     isCitizen ? "10" : "all",
   );
 
-  const { data: users, isLoading, isError, refetch } = useAllUsers();
+  const {
+    data: allUsers,
+    isLoading: allLoading,
+    isError,
+    refetch,
+  } = useAllUsers();
+  const { data: searchResults, isLoading: searchLoading } =
+    useSearchUsers(searchQuery);
+  const nearbyDistanceVal =
+    selectedDistance !== "all" ? Number.parseInt(selectedDistance, 10) : 0;
+  const { data: nearbyUsers, isLoading: nearbyLoading } =
+    useNearbyUsers(nearbyDistanceVal);
+
+  const isLoading = searchQuery.trim()
+    ? searchLoading
+    : selectedDistance !== "all"
+      ? nearbyLoading
+      : allLoading;
+
+  // Use backend-filtered data as the source depending on active filters
+  const users = allUsers;
 
   const filteredUsers = useMemo(() => {
-    if (!users) return [];
+    let source = searchQuery.trim()
+      ? (searchResults ?? [])
+      : selectedDistance !== "all"
+        ? (nearbyUsers ?? [])
+        : (allUsers ?? []);
 
-    let result = sortByRank(users);
+    let result = sortByRank(source);
 
+    // Apply skill filter client-side on top of whichever source
     if (selectedSkill !== "All") {
       result = result.filter(
         (u) => u.skill.toLowerCase() === selectedSkill.toLowerCase(),
       );
     }
 
-    if (selectedDistance !== "all") {
+    // If both search + distance active, apply distance filter client-side on search results
+    if (searchQuery.trim() && selectedDistance !== "all") {
       const maxDist = Number.parseInt(selectedDistance, 10);
       result = result.filter((u) => Number(u.distance) <= maxDist);
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        (u) =>
-          u.name.toLowerCase().includes(q) ||
-          u.skill.toLowerCase().includes(q) ||
-          u.location.toLowerCase().includes(q),
-      );
-    }
-
     return result;
-  }, [users, selectedSkill, selectedDistance, searchQuery]);
+  }, [
+    allUsers,
+    searchResults,
+    nearbyUsers,
+    selectedSkill,
+    selectedDistance,
+    searchQuery,
+  ]);
 
   const stats = useMemo(() => {
     if (!users) return { total: 0, skilled: 0, avgTrust: 0, badged: 0 };

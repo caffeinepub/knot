@@ -131,7 +131,8 @@ export interface backendInterface {
     getWorkerStats(id: bigint): Promise<User>;
     init(): Promise<void>;
     registerCitizen(name: string, address: string): Promise<bigint>;
-    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string): Promise<bigint>;
+    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint): Promise<bigint>;
+    searchUsers(searchText: string): Promise<Array<User>>;
     submitLearningRequest(requesterId: string, targetUserId: bigint, message: string): Promise<void>;
     submitTestResult(workerId: bigint, mcqScore: bigint, practicalPassed: boolean): Promise<boolean>;
 }
@@ -292,17 +293,31 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async registerWorker(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<bigint> {
+    async registerWorker(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: bigint): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4);
+                const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4);
+            const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5);
+            return result;
+        }
+    }
+    async searchUsers(arg0: string): Promise<Array<User>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.searchUsers(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.searchUsers(arg0);
             return result;
         }
     }

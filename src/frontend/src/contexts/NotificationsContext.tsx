@@ -24,56 +24,19 @@ interface NotificationsContextValue {
   notifications: Notification[];
   unreadCount: number;
   markAllRead: () => void;
+  clearAll: () => void;
   addNotification: (n: Omit<Notification, "id" | "timestamp" | "read">) => void;
 }
 
-const STORAGE_KEY = "knot_notifications";
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: "n1",
-    type: "endorsement",
-    message: "Ravi Kumar endorsed your profile",
-    timestamp: Date.now() - 1000 * 60 * 5, // 5 min ago
-    read: false,
-  },
-  {
-    id: "n2",
-    type: "learning_request",
-    message: "Priya Sharma sent a learning request",
-    timestamp: Date.now() - 1000 * 60 * 30, // 30 min ago
-    read: false,
-  },
-  {
-    id: "n3",
-    type: "profile_view",
-    message: "Someone viewed your profile",
-    timestamp: Date.now() - 1000 * 60 * 60, // 1 hour ago
-    read: false,
-  },
-  {
-    id: "n4",
-    type: "endorsement",
-    message: "Sunita Devi endorsed your profile",
-    timestamp: Date.now() - 1000 * 60 * 90, // 90 min ago
-    read: true,
-  },
-  {
-    id: "n5",
-    type: "profile_view",
-    message: "A citizen near Chennai viewed your profile",
-    timestamp: Date.now() - 1000 * 60 * 120, // 2 hours ago
-    read: true,
-  },
-];
+const STORAGE_KEY = "knot_notifications_v2";
 
 function loadNotifications(): Notification[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return MOCK_NOTIFICATIONS;
+    if (!raw) return [];
     return JSON.parse(raw) as Notification[];
   } catch {
-    return MOCK_NOTIFICATIONS;
+    return [];
   }
 }
 
@@ -103,6 +66,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }, []);
 
+  const clearAll = useCallback(() => {
+    setNotifications([]);
+  }, []);
+
   const addNotification = useCallback(
     (n: Omit<Notification, "id" | "timestamp" | "read">) => {
       const newNotif: Notification = {
@@ -118,7 +85,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   return (
     <NotificationsContext.Provider
-      value={{ notifications, unreadCount, markAllRead, addNotification }}
+      value={{
+        notifications,
+        unreadCount,
+        markAllRead,
+        clearAll,
+        addNotification,
+      }}
     >
       {children}
     </NotificationsContext.Provider>

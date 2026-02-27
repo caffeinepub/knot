@@ -49,7 +49,8 @@ export interface backendInterface {
     getWorkerStats(id: bigint): Promise<User>;
     init(): Promise<void>;
     registerCitizen(name: string, address: string): Promise<bigint>;
-    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string): Promise<bigint>;
+    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint): Promise<bigint>;
+    searchUsers(searchText: string): Promise<Array<User>>;
     submitLearningRequest(requesterId: string, targetUserId: bigint, message: string): Promise<void>;
     submitTestResult(workerId: bigint, mcqScore: bigint, practicalPassed: boolean): Promise<boolean>;
 }

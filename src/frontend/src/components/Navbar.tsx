@@ -56,7 +56,8 @@ export function Navbar() {
   const navigate = useNavigate();
   const authUser = getAuthUser();
   const { lang, setLang, t } = useLang();
-  const { notifications, unreadCount, markAllRead } = useNotifications();
+  const { notifications, unreadCount, markAllRead, clearAll } =
+    useNotifications();
 
   const isActive = (path: string) => pathname === path;
 
@@ -177,15 +178,26 @@ export function Navbar() {
                     <span className="font-display font-semibold text-sm text-foreground">
                       {t("notif_title")}
                     </span>
-                    {unreadCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={markAllRead}
-                        className="text-xs text-primary hover:underline font-body"
-                      >
-                        {t("notif_mark_read")}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {unreadCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={markAllRead}
+                          className="text-xs text-primary hover:underline font-body"
+                        >
+                          {t("notif_mark_read")}
+                        </button>
+                      )}
+                      {notifications.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearAll}
+                          className="text-xs text-muted-foreground hover:text-destructive font-body hover:underline transition-colors"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="max-h-72 overflow-y-auto">
                     {recentNotifs.length === 0 ? (
@@ -218,16 +230,25 @@ export function Navbar() {
                       ))
                     )}
                   </div>
-                  {recentNotifs.length > 0 && unreadCount > 0 && (
+                  {recentNotifs.length > 0 && (
                     <>
                       <DropdownMenuSeparator />
-                      <div className="px-4 py-2">
+                      <div className="px-4 py-2 flex items-center justify-between gap-2">
+                        {unreadCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={markAllRead}
+                            className="flex-1 text-xs text-center text-muted-foreground hover:text-foreground font-body transition-colors"
+                          >
+                            {t("notif_mark_read")}
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={markAllRead}
-                          className="w-full text-xs text-center text-muted-foreground hover:text-foreground font-body transition-colors"
+                          onClick={clearAll}
+                          className="flex-1 text-xs text-center text-muted-foreground hover:text-destructive font-body transition-colors"
                         >
-                          {t("notif_mark_read")}
+                          Clear all
                         </button>
                       </div>
                     </>

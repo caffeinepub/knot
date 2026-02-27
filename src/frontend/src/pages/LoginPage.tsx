@@ -41,6 +41,7 @@ export function LoginPage() {
   const [workerLocation, setWorkerLocation] = useState("");
   const [workerBio, setWorkerBio] = useState("");
   const [workerVideoFile, setWorkerVideoFile] = useState<File | null>(null);
+  const [workerDistance, setWorkerDistance] = useState("5");
   const [workerLoading, setWorkerLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,15 +113,23 @@ export function LoginPage() {
     }
     setWorkerLoading(true);
 
-    // Use uploaded video preview URL if available, otherwise fallback
-    const videoURL =
-      localStorage.getItem("knot_worker_video_preview_url") ||
-      "https://www.w3schools.com/html/mov_bbb.mp4";
+    // Store blob URL only for local session preview — never send to backend
+    const blobPreviewUrl = localStorage.getItem(
+      "knot_worker_video_preview_url",
+    );
+    if (blobPreviewUrl) {
+      // Keep existing blob URL for same-session dashboard preview
+    }
 
     // Store video filename separately so dashboard can display it
     if (workerVideoFile?.name) {
       localStorage.setItem("knot_worker_video", workerVideoFile.name);
     }
+
+    const distanceValue = Math.max(
+      1,
+      Math.min(50, Number.parseInt(workerDistance, 10) || 5),
+    );
 
     // Try to register on backend with retries
     let backendId: bigint | null = null;
@@ -134,7 +143,8 @@ export function LoginPage() {
             workerSkill,
             workerLocation.trim(),
             workerBio.trim(),
-            videoURL,
+            "", // Empty string: blob URLs expire on refresh; backend stores "" and frontend uses local preview
+            BigInt(distanceValue),
           );
           break; // Success — exit retry loop
         } catch (err) {
@@ -355,6 +365,26 @@ export function LoginPage() {
                       onChange={(e) => setWorkerLocation(e.target.value)}
                       className="font-body border-border h-11"
                       required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="worker-distance"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      <MapPin className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                      Distance from city center (km)
+                    </Label>
+                    <Input
+                      id="worker-distance"
+                      type="number"
+                      min={1}
+                      max={50}
+                      placeholder="5"
+                      value={workerDistance}
+                      onChange={(e) => setWorkerDistance(e.target.value)}
+                      className="font-body border-border h-11"
                     />
                   </div>
 

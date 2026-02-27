@@ -56,9 +56,10 @@ export interface _SERVICE {
   'init' : ActorMethod<[], undefined>,
   'registerCitizen' : ActorMethod<[string, string], bigint>,
   'registerWorker' : ActorMethod<
-    [string, string, string, string, string],
+    [string, string, string, string, string, bigint],
     bigint
   >,
+  'searchUsers' : ActorMethod<[string], Array<User>>,
   'submitLearningRequest' : ActorMethod<[string, bigint, string], undefined>,
   'submitTestResult' : ActorMethod<[bigint, bigint, boolean], boolean>,
 }

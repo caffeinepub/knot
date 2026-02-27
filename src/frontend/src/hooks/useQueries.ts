@@ -35,23 +35,24 @@ export function useSearchUsers(query: string) {
           return [];
         }
       }
-      // Try backend search first, fall back to client-side filtering
+      // Use backend searchUsers (searches by name + skill)
       try {
-        const bySkill = await actor.getUsersBySkill(query.trim());
-        if (bySkill && bySkill.length > 0) return bySkill;
-      } catch {}
-      // Fallback: get all and filter client-side
-      try {
-        const all = await actor.getAllUsers();
-        const q = query.toLowerCase().trim();
-        return all.filter(
-          (u) =>
-            u.name.toLowerCase().includes(q) ||
-            u.skill.toLowerCase().includes(q) ||
-            u.location.toLowerCase().includes(q),
-        );
+        const results = await actor.searchUsers(query.trim());
+        return results;
       } catch {
-        return [];
+        // Fallback: get all and filter client-side
+        try {
+          const all = await actor.getAllUsers();
+          const q = query.toLowerCase().trim();
+          return all.filter(
+            (u) =>
+              u.name.toLowerCase().includes(q) ||
+              u.skill.toLowerCase().includes(q) ||
+              u.location.toLowerCase().includes(q),
+          );
+        } catch {
+          return [];
+        }
       }
     },
     enabled: !!actor && !isFetching,
