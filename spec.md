@@ -1,53 +1,26 @@
-# KNOT – Feature Updates v11
+# KNOT
 
 ## Current State
+Full-stack vocational skills platform with Motoko backend and React frontend. Features: dual login (citizen/worker), worker registration with skill/bio/video, home feed, profile pages, community pages, certification test, certificate display, multilingual support (5 languages), voice search, notifications, nearby filter, endorsements (worker-only), learning requests, badge system.
 
-KNOT is a full-stack vocational skills platform on ICP with:
-- Dual login (Citizen / Worker roles stored in localStorage)
-- Home feed with voice search, skill tabs, distance filter
-- Worker ProfilePage with endorse + request-to-learn buttons (shown for ALL roles)
-- Notification icon: absent
-- Share Profile button: absent
-- Name-based search: exists in VoiceSearch bar but only filters by skill/name/location — not prominently labelled as "name search"
-- Video autoplay on profile: absent (manual play only)
-- Endorsement role gating: absent (both citizens and workers see the endorse button)
-- Citizen-specific profile view: absent (same view for all roles)
-- Nearby Workers filter: exists (distance dropdown) but not labelled "Nearby Workers"
-- Notifications (endorsements, learning requests, profile views): absent
-- Mock data: 10 pre-seeded workers in Motoko backend; no dummy/fake DB logic outside backend
+**Known bug**: Registration (both citizen and worker) fails with "Registration failed. Please try again." error because the `actor` from `useActor` hook is `null` when the form is submitted -- the ICP actor takes a moment to initialize asynchronously, but the form doesn't wait for it.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Share Profile button** on ProfilePage: copies `window.location.href` to clipboard, shows a toast confirmation
-- **Notification icon** in Navbar (bell icon) with a count badge; mock notifications for new endorsements, learning requests, and profile views stored in React state/localStorage
-- **Name search** on HomePage: make the existing search bar prominent for name-based search (label update, search by name prioritised)
-- **Auto-play video** on ProfilePage: video element uses `autoPlay muted` attributes; YouTube embeds get `?autoplay=1&mute=1` query params
-- **Nearby Workers filter label**: rename distance dropdown label to "Nearby Workers" for citizen users
+- Loading state on login page that blocks form submission until actor is ready
+- Auto-retry mechanism: when actor is null on submit, wait up to 5 seconds for it to become available before showing error
+- Visual indicator on login page showing "Connecting to network..." when actor is initializing
 
 ### Modify
-- **Endorsement visibility**: hide the Endorse button entirely when `authUser.role === "citizen"`; citizens only see Request to Learn
-- **Citizen view mode on ProfilePage**: when `authUser.role === "citizen"`, show a simplified view with: skill video, trust badge, bio, contact number (mock: `+91 98XXX XXXXX`), and Request to Learn button only — hide endorsement stats panel and badge progress section
-- **VoiceSearch / search bar**: add explicit "Search by name" placeholder and label for citizens
-- **Navbar**: add bell notification icon with badge count; clicking opens a dropdown panel listing mock notifications
+- `LoginPage.tsx`: replace immediate `actor` null check with a wait/retry loop that polls for the actor up to 5 times with 1-second delays before giving up
+- Both `handleCitizenSubmit` and `handleWorkerSubmit` should use the retry approach
+- Disable submit buttons while actor is still loading (show spinner + "Connecting..." text)
 
 ### Remove
-- No features to remove; mock data in backend stays as-is (it is the only data source)
+- Nothing removed
 
 ## Implementation Plan
-
-1. **NotificationsContext** – Create `src/contexts/NotificationsContext.tsx` with mock notifications (3–5 items: endorsement received, learning request from citizen, profile viewed). Expose `notifications`, `unreadCount`, and `markAllRead`.
-
-2. **Navbar update** – Import Bell icon from lucide-react. Add notification icon button with red badge showing `unreadCount`. Clicking shows a DropdownMenu with notification items and a "Mark all read" action.
-
-3. **ProfilePage – Share Profile button** – Add a "Share Profile" button next to Back link. On click: `navigator.clipboard.writeText(window.location.href)` + `toast.success("Link copied!")`.
-
-4. **ProfilePage – Auto-play video** – For `<video>` elements add `autoPlay muted playsInline controls`. For YouTube iframes update src to include `?autoplay=1&mute=1`.
-
-5. **ProfilePage – Endorsement role gating** – Wrap the Endorse button in `{authUser?.role !== 'citizen' && ...}`. When citizen: show only video, trust badge chip, bio section, mock contact number, and Request to Learn button. Hide badge progress, stats grid, and endorse button.
-
-6. **HomePage – Search label** – Update `search_placeholder` to mention name search; add a small label "Search by name or skill" above the search bar for citizens.
-
-7. **Translations** – Add new translation keys: `profile_share`, `profile_share_copied`, `profile_contact`, `notif_title`, `notif_mark_read`, `notif_empty` to all 5 language objects.
-
-8. **Nearby Workers label** – In the distance dropdown trigger, show "Nearby Workers" label for citizens; keep existing label for workers.
+1. Update `LoginPage.tsx` to add actor polling/retry logic in both submit handlers
+2. Add loading indicator when actor is initializing (disable buttons with "Connecting..." state)
+3. The actor is available via `useActor()` which returns `{ actor, isFetching }` -- use `isFetching` to show connecting state on buttons

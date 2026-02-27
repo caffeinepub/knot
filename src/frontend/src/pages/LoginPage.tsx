@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Briefcase, Loader2, MapPin, Upload, User, Video } from "lucide-react";
 import { toast } from "sonner";
@@ -21,8 +21,14 @@ import { setAuthUser } from "../utils/auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { actor } = useActor();
+  const { actor, isFetching } = useActor();
   const { t } = useLang();
+
+  // Keep a ref to the latest actor so async handlers can access it after retries
+  const actorRef = useRef(actor);
+  useEffect(() => {
+    actorRef.current = actor;
+  }, [actor]);
 
   // Citizen state
   const [citizenName, setCitizenName] = useState("");
@@ -52,13 +58,22 @@ export function LoginPage() {
       toast.error(t("error_please_fill"));
       return;
     }
-    if (!actor) {
-      toast.error(t("error_backend_not_ready"));
-      return;
-    }
     setCitizenLoading(true);
     try {
-      const id = await actor.registerCitizen(
+      // Wait for actor with up to 8 retries (800 ms each = ~6.4 s total)
+      let currentActor = actorRef.current;
+      if (!currentActor) {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          currentActor = actorRef.current;
+          if (currentActor) break;
+        }
+      }
+      if (!currentActor) {
+        toast.error(t("error_backend_not_ready"));
+        return;
+      }
+      const id = await currentActor.registerCitizen(
         citizenName.trim(),
         citizenAddress.trim(),
       );
@@ -86,12 +101,21 @@ export function LoginPage() {
       toast.error(t("error_please_fill_required"));
       return;
     }
-    if (!actor) {
-      toast.error(t("error_backend_not_ready"));
-      return;
-    }
     setWorkerLoading(true);
     try {
+      // Wait for actor with up to 8 retries (800 ms each = ~6.4 s total)
+      let currentActor = actorRef.current;
+      if (!currentActor) {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          currentActor = actorRef.current;
+          if (currentActor) break;
+        }
+      }
+      if (!currentActor) {
+        toast.error(t("error_backend_not_ready"));
+        return;
+      }
       // Always use a stable sample URL — blob:// URLs cannot be serialized by ICP.
       // The file selection is UI-only for demo purposes.
       const videoURL = "https://www.w3schools.com/html/mov_bbb.mp4";
@@ -101,7 +125,7 @@ export function LoginPage() {
         location: workerLocation.trim(),
         videoURL,
       });
-      const id = await actor.registerWorker(
+      const id = await currentActor.registerWorker(
         workerName.trim(),
         workerSkill,
         workerLocation.trim(),
@@ -248,17 +272,27 @@ export function LoginPage() {
                   <Button
                     type="submit"
                     className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
-                    disabled={citizenLoading}
+                    disabled={citizenLoading || (isFetching && !citizenLoading)}
                   >
                     {citizenLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {t("login_finding_workers")}
                       </>
+                    ) : isFetching ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
                     ) : (
                       t("login_enter_as_citizen")
                     )}
                   </Button>
+                  {isFetching && !citizenLoading && (
+                    <p className="text-center text-amber-600 text-xs font-body mt-1.5">
+                      Connecting to network…
+                    </p>
+                  )}
                 </form>
               </TabsContent>
 
@@ -398,17 +432,27 @@ export function LoginPage() {
                   <Button
                     type="submit"
                     className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
-                    disabled={workerLoading}
+                    disabled={workerLoading || (isFetching && !workerLoading)}
                   >
                     {workerLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {t("login_creating_profile")}
                       </>
+                    ) : isFetching ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
                     ) : (
                       t("login_register_as_worker")
                     )}
                   </Button>
+                  {isFetching && !workerLoading && (
+                    <p className="text-center text-amber-600 text-xs font-body mt-1.5">
+                      Connecting to network…
+                    </p>
+                  )}
                 </form>
               </TabsContent>
             </Tabs>
