@@ -22,12 +22,12 @@ import {
   Users,
   X,
 } from "lucide-react";
+// Note: Users is still used in notification icons
 import { useState } from "react";
 import { useLang } from "../contexts/LanguageContext";
 import { useNotifications } from "../contexts/NotificationsContext";
 import type { NotificationType } from "../contexts/NotificationsContext";
 import { clearAuthUser, getAuthUser } from "../utils/auth";
-import { SKILL_CATEGORIES } from "../utils/helpers";
 import { LANGUAGE_OPTIONS, type LangCode } from "../utils/translations";
 
 function timeAgo(ts: number): string {
@@ -112,35 +112,6 @@ export function Navbar() {
                 {t("nav_home")}
               </Button>
             </Link>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white/80 hover:text-white hover:bg-white/10 gap-2 font-body"
-                >
-                  <Users className="w-4 h-4" />
-                  {t("nav_communities")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-48 max-h-72 overflow-y-auto"
-              >
-                {SKILL_CATEGORIES.filter((s) => s !== "All").map((skill) => (
-                  <DropdownMenuItem key={skill} asChild>
-                    <Link
-                      to="/community/$skill"
-                      params={{ skill }}
-                      className="cursor-pointer"
-                    >
-                      {skill} {t("nav_community_suffix")}
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
 
             <Link to="/requests">
               <Button
@@ -392,24 +363,6 @@ export function Navbar() {
                 <Home className="w-4 h-4" />
                 {t("nav_home")}
               </Link>
-              <div className="px-3 py-1">
-                <p className="text-white/40 text-xs uppercase tracking-widest font-body mb-1">
-                  {t("nav_communities")}
-                </p>
-                <div className="max-h-40 overflow-y-auto">
-                  {SKILL_CATEGORIES.filter((s) => s !== "All").map((skill) => (
-                    <Link
-                      key={skill}
-                      to="/community/$skill"
-                      params={{ skill }}
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors text-sm font-body"
-                    >
-                      {skill}
-                    </Link>
-                  ))}
-                </div>
-              </div>
               <Link
                 to="/requests"
                 onClick={() => setMobileOpen(false)}

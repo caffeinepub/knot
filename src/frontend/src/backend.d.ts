@@ -7,6 +7,16 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export interface CertificationResult {
+    workerId: bigint;
+    level: string;
+    issuedDate: Time;
+    skill: string;
+    certificateId: string;
+    mcqScore: bigint;
+    practicalPassed: boolean;
+    passed: boolean;
+}
 export interface LearningRequest {
     id: bigint;
     message: string;
@@ -19,6 +29,7 @@ export interface User {
     id: bigint;
     bio: string;
     badgeLevel: string;
+    contact: string;
     name: string;
     trustScore: bigint;
     endorsementCount: bigint;
@@ -27,18 +38,16 @@ export interface User {
     videoURL: string;
     location: string;
 }
-export interface CertificationResult {
-    workerId: bigint;
-    level: string;
-    issuedDate: Time;
-    skill: string;
-    certificateId: string;
-    mcqScore: bigint;
-    practicalPassed: boolean;
-    passed: boolean;
+export interface Citizen {
+    id: bigint;
+    name: string;
+    address: string;
 }
 export interface backendInterface {
+    clearAllData(): Promise<void>;
     endorseUser(id: bigint): Promise<void>;
+    findCitizenByName(name: string): Promise<Citizen | null>;
+    findWorkerByName(name: string): Promise<User | null>;
     getAllLearningRequests(): Promise<Array<LearningRequest>>;
     getAllUsers(): Promise<Array<User>>;
     getCertification(workerId: bigint): Promise<CertificationResult | null>;
@@ -49,7 +58,7 @@ export interface backendInterface {
     getWorkerStats(id: bigint): Promise<User>;
     init(): Promise<void>;
     registerCitizen(name: string, address: string): Promise<bigint>;
-    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint): Promise<bigint>;
+    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint, contact: string): Promise<bigint>;
     searchUsers(searchText: string): Promise<Array<User>>;
     submitLearningRequest(requesterId: string, targetUserId: bigint, message: string): Promise<void>;
     submitTestResult(workerId: bigint, mcqScore: bigint, practicalPassed: boolean): Promise<boolean>;

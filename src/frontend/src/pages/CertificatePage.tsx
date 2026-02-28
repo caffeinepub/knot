@@ -46,8 +46,18 @@ export function CertificatePage() {
     staleTime: 1000 * 60,
   });
 
-  const workerName = authUser?.name ?? "Worker";
-  const workerSkill = cert?.skill ?? authUser?.skill ?? "Vocational Skill";
+  // Allow citizens to view a worker's cert if stored in localStorage
+  const isCitizenViewingCert =
+    authUser?.role === "citizen" &&
+    typeof window !== "undefined" &&
+    !!localStorage.getItem("knot_view_cert_name");
+
+  const workerName = isCitizenViewingCert
+    ? (localStorage.getItem("knot_view_cert_name") ?? "Worker")
+    : (authUser?.name ?? "Worker");
+  const workerSkill = isCitizenViewingCert
+    ? (localStorage.getItem("knot_view_cert_skill") ?? "Vocational Skill")
+    : (cert?.skill ?? authUser?.skill ?? "Vocational Skill");
   const certId =
     cert?.certificateId ?? `KNOT-${Date.now().toString(36).toUpperCase()}`;
   const certDate = cert?.issuedDate
@@ -62,7 +72,24 @@ export function CertificatePage() {
     window.print();
   }
 
-  if (!authUser || authUser.role !== "worker") {
+  if (!authUser) {
+    return (
+      <main className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center">
+          <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <p className="font-display font-semibold text-foreground">
+            Please log in to view certificates
+          </p>
+          <Button className="mt-4" onClick={() => navigate({ to: "/login" })}>
+            Go to Login
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  // Block workers who haven't passed — citizens with a stored cert name can view
+  if (authUser.role !== "worker" && !isCitizenViewingCert) {
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="text-center">
@@ -89,12 +116,11 @@ export function CertificatePage() {
     );
   }
 
-  // Block access if assessment not passed
-  // Also check localStorage (set by CertificationTestPage on submit)
+  // Block access if assessment not passed (only for workers — citizens viewing a specific cert bypass this)
   const localPassed =
     typeof window !== "undefined" &&
     localStorage.getItem("knot_cert_passed") === "true";
-  if (!cert?.passed && !localPassed) {
+  if (!isCitizenViewingCert && !cert?.passed && !localPassed) {
     return (
       <main className="flex-1 flex items-center justify-center p-8">
         <div className="text-center max-w-sm">
@@ -136,8 +162,19 @@ export function CertificatePage() {
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body { background: white; }
-          .cert-container { box-shadow: none !important; }
+          body { background: #0a3d2e !important; margin: 0 !important; padding: 0 !important; }
+          .cert-container {
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            aspect-ratio: auto !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+          }
+          main { padding: 0 !important; }
+          .container { max-width: 100% !important; padding: 0 !important; }
         }
         @page {
           size: landscape;
@@ -150,11 +187,15 @@ export function CertificatePage() {
         <div className="container mx-auto flex items-center justify-between">
           <button
             type="button"
-            onClick={() => navigate({ to: "/worker-dashboard" })}
+            onClick={() =>
+              isCitizenViewingCert
+                ? navigate({ to: "/" })
+                : navigate({ to: "/worker-dashboard" })
+            }
             className="flex items-center gap-2 text-white/80 hover:text-white font-body text-sm transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            {t("cert_go_dashboard")}
+            {isCitizenViewingCert ? "Back to Feed" : t("cert_go_dashboard")}
           </button>
           <Button
             onClick={handleDownload}

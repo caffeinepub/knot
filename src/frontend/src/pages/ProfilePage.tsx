@@ -11,9 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Link, useParams } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Award,
   BookOpen,
   CheckCircle2,
   Loader2,
@@ -27,8 +29,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import type { CertificationResult } from "../backend.d.ts";
 import { useLang } from "../contexts/LanguageContext";
 import { useNotifications } from "../contexts/NotificationsContext";
+import { useActor } from "../hooks/useActor";
 import {
   useEndorseUser,
   useSubmitLearningRequest,
@@ -41,12 +45,7 @@ import {
   getSkillThumbClass,
   getTranslatedSkillName,
 } from "../utils/helpers";
-
-/** Generate a mock contact number from worker id */
-function getMockContact(userId: bigint): string {
-  const padded = String(Number(userId)).padStart(4, "0");
-  return `+91 9${padded} XXXXX`;
-}
+import { getVideoObjectURL } from "../utils/videoDB";
 
 export function ProfilePage() {
   const { id } = useParams({ from: "/main/profile/$id" });
@@ -55,6 +54,8 @@ export function ProfilePage() {
   const authUser = getAuthUser();
   const isCitizen = authUser?.role === "citizen";
   const { addNotification } = useNotifications();
+  const navigate = useNavigate();
+  const { actor, isFetching } = useActor();
 
   const { data: user, isLoading, isError, refetch } = useUser(userId);
   const endorseMutation = useEndorseUser();
@@ -64,6 +65,36 @@ export function ProfilePage() {
   const [requesterName, setRequesterName] = useState("");
   const [learnMessage, setLearnMessage] = useState("");
   const [endorsed, setEndorsed] = useState(false);
+  const [videoObjectUrl, setVideoObjectUrl] = useState<string | null>(null);
+
+  // Load video from IndexedDB when user data is available
+  useEffect(() => {
+    if (!userId) return;
+    let objectUrl: string | null = null;
+    getVideoObjectURL(userId.toString())
+      .then((url) => {
+        if (url) {
+          objectUrl = url;
+          setVideoObjectUrl(url);
+        }
+      })
+      .catch(() => {
+        // silently ignore
+      });
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [userId]);
+
+  // Query worker's certification (for citizen view)
+  const { data: workerCert } = useQuery<CertificationResult | null>({
+    queryKey: ["cert", userId?.toString()],
+    queryFn: async () => {
+      if (!actor || !userId) return null;
+      return actor.getCertification(userId);
+    },
+    enabled: !!actor && !isFetching && !!userId && isCitizen,
+  });
 
   // Fire a profile_view notification whenever someone opens a worker's profile
   useEffect(() => {
@@ -210,7 +241,7 @@ export function ProfilePage() {
           <div className="bg-card rounded-2xl shadow-card overflow-hidden mb-5 animate-slide-up">
             {/* Video / Cover */}
             <div
-              className={`relative h-64 ${!ytId ? thumbClass : ""} overflow-hidden`}
+              className={`relative h-64 ${!(ytId || videoObjectUrl || user.videoURL) ? thumbClass : "bg-black"} overflow-hidden`}
             >
               {ytId ? (
                 <iframe
@@ -220,9 +251,19 @@ export function ProfilePage() {
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 />
+              ) : videoObjectUrl ? (
+                <video
+                  key={videoObjectUrl}
+                  className="w-full h-full object-contain"
+                  src={videoObjectUrl}
+                  autoPlay
+                  muted
+                  playsInline
+                  controls
+                />
               ) : user.videoURL ? (
                 <video
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   src={user.videoURL}
                   autoPlay
                   muted
@@ -263,8 +304,7 @@ export function ProfilePage() {
                     </div>
                     <div className="bg-black/30 backdrop-blur-sm rounded-lg px-3 py-1.5">
                       <p className="text-white text-sm font-body font-medium">
-                        {emoji} {getTranslatedSkillName(user.skill, t)}{" "}
-                        {t("badge_portfolio")}
+                        No video uploaded by this worker
                       </p>
                     </div>
                   </div>
@@ -320,20 +360,44 @@ export function ProfilePage() {
                 </h2>
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-primary" />
-                  <span className="font-body text-foreground text-sm font-medium">
-                    {getMockContact(user.id)}
-                  </span>
+                  {user.contact?.trim() ? (
+                    <span className="font-body text-foreground text-sm font-medium">
+                      {user.contact}
+                    </span>
+                  ) : (
+                    <span className="font-body text-muted-foreground text-sm italic">
+                      No contact is provided by the worker
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {/* Request to Learn — full width */}
-              <Button
-                onClick={() => setLearnModalOpen(true)}
-                className="w-full h-11 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-body font-semibold"
-              >
-                <BookOpen className="w-4 h-4" />
-                {t("profile_request_learn")}
-              </Button>
+              {/* Request to Learn */}
+              <div className="flex flex-col gap-3">
+                <Button
+                  onClick={() => setLearnModalOpen(true)}
+                  className="w-full h-11 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-body font-semibold"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  {t("profile_request_learn")}
+                </Button>
+
+                {/* View Certificate (if worker has passed) */}
+                {workerCert?.passed && (
+                  <Button
+                    variant="outline"
+                    className="w-full h-11 gap-2 font-body font-semibold border-amber-400 text-amber-700 hover:bg-amber-50"
+                    onClick={() => {
+                      localStorage.setItem("knot_view_cert_name", user.name);
+                      localStorage.setItem("knot_view_cert_skill", user.skill);
+                      navigate({ to: "/certificate" });
+                    }}
+                  >
+                    <Award className="w-4 h-4" />
+                    View Certificate
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -429,7 +493,7 @@ export function ProfilePage() {
         <div className="bg-card rounded-2xl shadow-card overflow-hidden mb-5 animate-slide-up">
           {/* Cover / Video area */}
           <div
-            className={`relative h-64 ${!ytId ? thumbClass : ""} overflow-hidden`}
+            className={`relative h-64 ${!(ytId || videoObjectUrl || user.videoURL) ? thumbClass : "bg-black"} overflow-hidden`}
           >
             {ytId ? (
               <iframe
@@ -439,9 +503,19 @@ export function ProfilePage() {
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
+            ) : videoObjectUrl ? (
+              <video
+                key={videoObjectUrl}
+                className="w-full h-full object-contain"
+                src={videoObjectUrl}
+                autoPlay
+                muted
+                playsInline
+                controls
+              />
             ) : user.videoURL ? (
               <video
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 src={user.videoURL}
                 autoPlay
                 muted
@@ -482,17 +556,8 @@ export function ProfilePage() {
                   </div>
                   <div className="bg-black/30 backdrop-blur-sm rounded-lg px-3 py-1.5">
                     <p className="text-white text-sm font-body font-medium">
-                      {emoji} {getTranslatedSkillName(user.skill, t)}{" "}
-                      {t("badge_portfolio")}
+                      No video uploaded by this worker
                     </p>
-                    <a
-                      href={user.videoURL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white/70 text-xs font-body hover:text-white transition-colors underline"
-                    >
-                      {t("profile_watch_external")}
-                    </a>
                   </div>
                 </div>
               </>

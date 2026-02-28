@@ -20,6 +20,7 @@ export interface CertificationResult {
   'practicalPassed' : boolean,
   'passed' : boolean,
 }
+export interface Citizen { 'id' : bigint, 'name' : string, 'address' : string }
 export interface LearningRequest {
   'id' : bigint,
   'message' : string,
@@ -32,6 +33,7 @@ export interface User {
   'id' : bigint,
   'bio' : string,
   'badgeLevel' : string,
+  'contact' : string,
   'name' : string,
   'trustScore' : bigint,
   'endorsementCount' : bigint,
@@ -41,7 +43,10 @@ export interface User {
   'location' : string,
 }
 export interface _SERVICE {
+  'clearAllData' : ActorMethod<[], undefined>,
   'endorseUser' : ActorMethod<[bigint], undefined>,
+  'findCitizenByName' : ActorMethod<[string], [] | [Citizen]>,
+  'findWorkerByName' : ActorMethod<[string], [] | [User]>,
   'getAllLearningRequests' : ActorMethod<[], Array<LearningRequest>>,
   'getAllUsers' : ActorMethod<[], Array<User>>,
   'getCertification' : ActorMethod<[bigint], [] | [CertificationResult]>,
@@ -56,7 +61,7 @@ export interface _SERVICE {
   'init' : ActorMethod<[], undefined>,
   'registerCitizen' : ActorMethod<[string, string], bigint>,
   'registerWorker' : ActorMethod<
-    [string, string, string, string, string, bigint],
+    [string, string, string, string, string, bigint, string],
     bigint
   >,
   'searchUsers' : ActorMethod<[string], Array<User>>,

@@ -13,11 +13,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
-import { Briefcase, Loader2, MapPin, Upload, User, Video } from "lucide-react";
+import {
+  Briefcase,
+  Loader2,
+  MapPin,
+  Phone,
+  Upload,
+  User,
+  Video,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { setAuthUser } from "../utils/auth";
+import { saveVideoBlob } from "../utils/videoDB";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -40,6 +49,7 @@ export function LoginPage() {
   const [workerSkill, setWorkerSkill] = useState("");
   const [workerLocation, setWorkerLocation] = useState("");
   const [workerBio, setWorkerBio] = useState("");
+  const [workerContact, setWorkerContact] = useState("");
   const [workerVideoFile, setWorkerVideoFile] = useState<File | null>(null);
   const [workerDistance, setWorkerDistance] = useState("5");
   const [workerLoading, setWorkerLoading] = useState(false);
@@ -50,9 +60,6 @@ export function LoginPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setWorkerVideoFile(file);
-    // Create an object URL for local video preview in the dashboard
-    const previewUrl = URL.createObjectURL(file);
-    localStorage.setItem("knot_worker_video_preview_url", previewUrl);
   }
 
   async function handleCitizenSubmit(e: React.FormEvent) {
@@ -63,23 +70,30 @@ export function LoginPage() {
     }
     setCitizenLoading(true);
 
-    // Try to register citizen on backend, with fallback to local ID
-    let backendId: bigint | null = null;
+    const name = citizenName.trim();
+    const address = citizenAddress.trim();
+
+    // First: check if citizen with this name already exists (re-login)
+    let userId: bigint | null = null;
+    let isReturning = false;
+
     const maxRetries = 8;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const currentActor = actorRef.current;
       if (currentActor) {
         try {
-          backendId = await currentActor.registerCitizen(
-            citizenName.trim(),
-            citizenAddress.trim(),
-          );
+          // Check for existing citizen first
+          const existing = await currentActor.findCitizenByName(name);
+          if (existing && existing !== null) {
+            userId = existing.id;
+            isReturning = true;
+          } else {
+            // Not found — register fresh
+            userId = await currentActor.registerCitizen(name, address);
+          }
           break;
         } catch (err) {
-          console.warn(
-            `Citizen registration attempt ${attempt + 1} failed:`,
-            err,
-          );
+          console.warn(`Citizen login attempt ${attempt + 1} failed:`, err);
           if (attempt < maxRetries - 1) {
             await new Promise((res) => setTimeout(res, 1000));
           }
@@ -89,18 +103,23 @@ export function LoginPage() {
       }
     }
 
-    const userId = backendId ?? BigInt(Date.now() % 1000000);
+    // Fallback to local ID if backend never responded
+    const finalId = userId ?? BigInt(Date.now() % 1000000);
 
     setAuthUser({
       role: "citizen",
-      id: userId,
-      name: citizenName.trim(),
-      address: citizenAddress.trim(),
+      id: finalId,
+      name,
+      address,
     });
 
-    toast.success(
-      `${t("home_hero_welcome")}, ${citizenName}! ${t("login_welcome_citizen")}`,
-    );
+    if (isReturning) {
+      toast.success(`Welcome back, ${name}! 👋`);
+    } else {
+      toast.success(
+        `${t("home_hero_welcome")}, ${name}! ${t("login_welcome_citizen")}`,
+      );
+    }
     setCitizenLoading(false);
     navigate({ to: "/" });
   }
@@ -113,45 +132,46 @@ export function LoginPage() {
     }
     setWorkerLoading(true);
 
-    // Store blob URL only for local session preview — never send to backend
-    const blobPreviewUrl = localStorage.getItem(
-      "knot_worker_video_preview_url",
-    );
-    if (blobPreviewUrl) {
-      // Keep existing blob URL for same-session dashboard preview
-    }
-
-    // Store video filename separately so dashboard can display it
-    if (workerVideoFile?.name) {
-      localStorage.setItem("knot_worker_video", workerVideoFile.name);
-    }
-
+    const name = workerName.trim();
+    const skill = workerSkill;
+    const location = workerLocation.trim();
+    const bio = workerBio.trim();
+    const contact = workerContact.trim();
     const distanceValue = Math.max(
       1,
       Math.min(50, Number.parseInt(workerDistance, 10) || 5),
     );
 
-    // Try to register on backend with retries
-    let backendId: bigint | null = null;
+    // Try to find existing worker first, or register fresh — with retries
+    let finalId: bigint | null = null;
+    let isReturning = false;
     const maxRetries = 10;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const currentActor = actorRef.current;
       if (currentActor) {
         try {
-          backendId = await currentActor.registerWorker(
-            workerName.trim(),
-            workerSkill,
-            workerLocation.trim(),
-            workerBio.trim(),
-            "", // Empty string: blob URLs expire on refresh; backend stores "" and frontend uses local preview
-            BigInt(distanceValue),
-          );
+          // Check if worker with this name already exists (re-login)
+          const existing = await currentActor.findWorkerByName(name);
+          if (existing && existing !== null) {
+            // Returning worker — reuse their existing ID
+            finalId = existing.id;
+            isReturning = true;
+          } else {
+            // New worker — register on backend
+            finalId = await currentActor.registerWorker(
+              name,
+              skill,
+              location,
+              bio,
+              "", // Empty string: blob URLs expire on refresh; backend stores "" and frontend uses local IndexedDB
+              BigInt(distanceValue),
+              contact,
+            );
+          }
           break; // Success — exit retry loop
         } catch (err) {
-          console.warn(
-            `Worker registration attempt ${attempt + 1} failed:`,
-            err,
-          );
+          console.warn(`Worker login attempt ${attempt + 1} failed:`, err);
           if (attempt < maxRetries - 1) {
             await new Promise((res) => setTimeout(res, 1000));
           }
@@ -162,19 +182,39 @@ export function LoginPage() {
       }
     }
 
-    // Use backend ID if we got one, otherwise local fallback
-    const userId = backendId ?? BigInt(Date.now() % 1000000);
+    // Fallback to local ID if backend never responded
+    const userId = finalId ?? BigInt(Date.now() % 1000000);
+
+    // Save video blob to IndexedDB under the CONSISTENT id (existing or new)
+    // This ensures the IndexedDB key matches the profile URL (/profile/:id)
+    if (workerVideoFile) {
+      try {
+        await saveVideoBlob(userId.toString(), workerVideoFile);
+      } catch (err) {
+        console.warn("Failed to save video to IndexedDB:", err);
+      }
+      // Also store a same-session preview URL
+      const previewUrl = URL.createObjectURL(workerVideoFile);
+      localStorage.setItem("knot_worker_video_preview_url", previewUrl);
+    }
+
+    // Always store the consistent ID — critical for video lookup on profile page
+    localStorage.setItem("knot_worker_id", userId.toString());
 
     setAuthUser({
       role: "worker",
       id: userId,
-      name: workerName.trim(),
-      skill: workerSkill,
+      name,
+      skill,
     });
 
-    toast.success(
-      `${t("home_hero_welcome")} to KNOT, ${workerName}! ${t("login_welcome_worker")}`,
-    );
+    if (isReturning) {
+      toast.success(`Welcome back, ${name}! 👋`);
+    } else {
+      toast.success(
+        `${t("home_hero_welcome")} to KNOT, ${name}! ${t("login_welcome_worker")}`,
+      );
+    }
     setWorkerLoading(false);
     navigate({ to: "/worker-dashboard" });
   }
@@ -408,6 +448,28 @@ export function LoginPage() {
                     />
                   </div>
 
+                  {/* Contact Number */}
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="worker-contact"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      <Phone className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                      Contact Number{" "}
+                      <span className="text-muted-foreground font-normal">
+                        ({t("login_optional")})
+                      </span>
+                    </Label>
+                    <Input
+                      id="worker-contact"
+                      type="tel"
+                      placeholder="e.g. +91 98765 43210"
+                      value={workerContact}
+                      onChange={(e) => setWorkerContact(e.target.value)}
+                      className="font-body border-border h-11"
+                    />
+                  </div>
+
                   {/* Video Upload */}
                   <div className="space-y-1.5">
                     <Label className="font-body text-sm font-medium text-foreground">
@@ -420,7 +482,7 @@ export function LoginPage() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="video/*"
+                      accept="video/mp4,video/*"
                       className="hidden"
                       onChange={handleVideoSelect}
                     />
@@ -457,7 +519,7 @@ export function LoginPage() {
                           {t("login_upload_video")}
                         </span>
                         <span className="text-xs font-body text-amber-500">
-                          {t("login_video_formats")}
+                          MP4 supported · {t("login_video_formats")}
                         </span>
                       </button>
                     )}

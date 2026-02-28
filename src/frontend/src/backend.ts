@@ -89,6 +89,16 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface CertificationResult {
+    workerId: bigint;
+    level: string;
+    issuedDate: Time;
+    skill: string;
+    certificateId: string;
+    mcqScore: bigint;
+    practicalPassed: boolean;
+    passed: boolean;
+}
 export interface LearningRequest {
     id: bigint;
     message: string;
@@ -101,6 +111,7 @@ export interface User {
     id: bigint;
     bio: string;
     badgeLevel: string;
+    contact: string;
     name: string;
     trustScore: bigint;
     endorsementCount: bigint;
@@ -109,18 +120,16 @@ export interface User {
     videoURL: string;
     location: string;
 }
-export interface CertificationResult {
-    workerId: bigint;
-    level: string;
-    issuedDate: Time;
-    skill: string;
-    certificateId: string;
-    mcqScore: bigint;
-    practicalPassed: boolean;
-    passed: boolean;
+export interface Citizen {
+    id: bigint;
+    name: string;
+    address: string;
 }
 export interface backendInterface {
+    clearAllData(): Promise<void>;
     endorseUser(id: bigint): Promise<void>;
+    findCitizenByName(name: string): Promise<Citizen | null>;
+    findWorkerByName(name: string): Promise<User | null>;
     getAllLearningRequests(): Promise<Array<LearningRequest>>;
     getAllUsers(): Promise<Array<User>>;
     getCertification(workerId: bigint): Promise<CertificationResult | null>;
@@ -131,14 +140,28 @@ export interface backendInterface {
     getWorkerStats(id: bigint): Promise<User>;
     init(): Promise<void>;
     registerCitizen(name: string, address: string): Promise<bigint>;
-    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint): Promise<bigint>;
+    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint, contact: string): Promise<bigint>;
     searchUsers(searchText: string): Promise<Array<User>>;
     submitLearningRequest(requesterId: string, targetUserId: bigint, message: string): Promise<void>;
     submitTestResult(workerId: bigint, mcqScore: bigint, practicalPassed: boolean): Promise<boolean>;
 }
-import type { CertificationResult as _CertificationResult } from "./declarations/backend.did.d.ts";
+import type { CertificationResult as _CertificationResult, Citizen as _Citizen, User as _User } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async clearAllData(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.clearAllData();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.clearAllData();
+            return result;
+        }
+    }
     async endorseUser(arg0: bigint): Promise<void> {
         if (this.processError) {
             try {
@@ -151,6 +174,34 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.endorseUser(arg0);
             return result;
+        }
+    }
+    async findCitizenByName(arg0: string): Promise<Citizen | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.findCitizenByName(arg0);
+                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.findCitizenByName(arg0);
+            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async findWorkerByName(arg0: string): Promise<User | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.findWorkerByName(arg0);
+                return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.findWorkerByName(arg0);
+            return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
         }
     }
     async getAllLearningRequests(): Promise<Array<LearningRequest>> {
@@ -185,14 +236,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getCertification(arg0);
-                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCertification(arg0);
-            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
         }
     }
     async getLearningRequestsForWorker(arg0: bigint): Promise<Array<LearningRequest>> {
@@ -293,17 +344,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async registerWorker(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: bigint): Promise<bigint> {
+    async registerWorker(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: bigint, arg6: string): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5);
+                const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5);
+            const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
             return result;
         }
     }
@@ -350,7 +401,13 @@ export class Backend implements backendInterface {
         }
     }
 }
-function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CertificationResult]): CertificationResult | null {
+function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Citizen]): Citizen | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_User]): User | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CertificationResult]): CertificationResult | null {
     return value.length === 0 ? null : value[0];
 }
 export interface CreateActorOptions {

@@ -15,10 +15,30 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { getAuthUser } from "../utils/auth";
+
+// ─── Text-to-Speech ─────────────────────────────────────────────────────────
+
+function speakText(text: string, langCode: string) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel(); // stop any ongoing speech
+  const utterance = new SpeechSynthesisUtterance(text);
+  const langMap: Record<string, string> = {
+    en: "en-IN",
+    te: "te-IN",
+    hi: "hi-IN",
+    ml: "ml-IN",
+    kn: "kn-IN",
+  };
+  utterance.lang = langMap[langCode] ?? "en-IN";
+  utterance.rate = 0.9;
+  utterance.pitch = 1;
+  window.speechSynthesis.speak(utterance);
+}
 
 // ─── Question Bank ─────────────────────────────────────────────────────────────
 
@@ -39,16 +59,162 @@ interface QuestionBank {
   practical: PracticalQuestion;
 }
 
-function getQuestionBank(skill: string): QuestionBank {
+function getQuestionBank(skill: string, lang: string): QuestionBank {
   const s = skill.toLowerCase();
 
-  if (
+  const isCarpenter =
     s.includes("carpenter") ||
     s.includes("wood") ||
     s.includes("బడ") ||
     s.includes("वढई") ||
-    s.includes("bada")
-  ) {
+    s.includes("bada");
+
+  const isTailor =
+    s.includes("tailor") ||
+    s.includes("seam") ||
+    s.includes("stitch") ||
+    s.includes("దర్జీ") ||
+    s.includes("दर्जी");
+
+  const isPlumber =
+    s.includes("plumb") ||
+    s.includes("pipe") ||
+    s.includes("పైప్") ||
+    s.includes("प्लंबर");
+
+  // ── Carpenter ──────────────────────────────────────────────────────────────
+  if (isCarpenter) {
+    if (lang === "te") {
+      return {
+        mcq: [
+          {
+            id: 1,
+            question: "వీడియోలో చూపిన చెక్క జాయింట్ ఏది?",
+            options: ["డవ్‌టెయిల్", "బట్ జాయింట్", "మోర్టైస్", "లాప్ జాయింట్"],
+            correctIndex: 0,
+          },
+          {
+            id: 2,
+            question: "వంపు కట్స్ కోసం ఏ టూల్ బెస్ట్?",
+            options: ["సర్క్యులర్ సా", "జిగ్‌సా", "హ్యాండ్ సా", "టేబుల్ సా"],
+            correctIndex: 1,
+          },
+          {
+            id: 3,
+            question: "ఫర్నిచర్ కోసం ప్లైవుడ్ స్టాండర్డ్ మందం?",
+            options: ["6mm", "12mm", "18mm", "25mm"],
+            correctIndex: 2,
+          },
+          {
+            id: 4,
+            question: "ముడి చెక్కపై మొదట ఏ ఫినిష్ వేయాలి?",
+            options: ["పెయింట్", "లాక్కర్", "శాండ్‌పేపర్ (80 గ్రిట్)", "ప్రైమర్"],
+            correctIndex: 2,
+          },
+          {
+            id: 5,
+            question: "బాహ్య ఫర్నిచర్ కోసం ఏ చెక్క బెస్ట్?",
+            options: ["పైన్", "టీక్", "MDF", "బాల్సా"],
+            correctIndex: 1,
+          },
+          {
+            id: 6,
+            question: "చెక్కలో 'గ్రెయిన్ డైరెక్షన్' దేనిని ప్రభావితం చేస్తుంది?",
+            options: ["రంగు", "బరువు", "బలం & చీలిక", "ఖర్చు"],
+            correctIndex: 2,
+          },
+          {
+            id: 7,
+            question: "వీడియోలో చూపిన స్క్రూ రకం ఏది?",
+            options: ["ఫిలిప్స్", "ఫ్లాట్", "టోర్క్స్", "హెక్స్"],
+            correctIndex: 0,
+          },
+          {
+            id: 8,
+            question: "వుడ్ పుట్టి యొక్క ప్రయోజనం?",
+            options: ["పలకలు జోడించడం", "రంధ్రాలు నింపడం", "వాటర్‌ప్రూఫింగ్", "స్టెయినింగ్"],
+            correctIndex: 1,
+          },
+          {
+            id: 9,
+            question: "కట్టింగ్ చేసేటప్పుడు ముఖ్యమైన సేఫ్టీ గేర్?",
+            options: ["గ్లోవ్స్ మాత్రమే", "గాగుల్స్ మరియు మాస్క్", "అప్రన్ మాత్రమే", "ఏమీ లేదు"],
+            correctIndex: 1,
+          },
+        ],
+        practical: {
+          id: 10,
+          description:
+            "ఒక సాధారణ చెక్క బాక్స్ ఫ్రేమ్ నిర్మించండి. మీరు కొలవడం, కట్ చేయడం మరియు జోడించడం రికార్డ్ చేయండి.",
+        },
+      };
+    }
+    if (lang === "hi") {
+      return {
+        mcq: [
+          {
+            id: 1,
+            question: "वीडियो में दिखाया गया लकड़ी का जोड़ कौन सा है?",
+            options: ["डवटेल", "बट जॉइंट", "मोर्टाइस", "लैप जॉइंट"],
+            correctIndex: 0,
+          },
+          {
+            id: 2,
+            question: "घुमावदार कट के लिए कौन सा उपकरण सबसे अच्छा है?",
+            options: ["सर्कुलर सॉ", "जिगसॉ", "हैंड सॉ", "टेबल सॉ"],
+            correctIndex: 1,
+          },
+          {
+            id: 3,
+            question: "फर्नीचर के लिए प्लाईवुड की मानक मोटाई?",
+            options: ["6mm", "12mm", "18mm", "25mm"],
+            correctIndex: 2,
+          },
+          {
+            id: 4,
+            question: "कच्ची लकड़ी पर पहले कौन सा फिनिश लगाएं?",
+            options: ["पेंट", "लेकर", "सैंडपेपर (80 ग्रिट)", "प्राइमर"],
+            correctIndex: 2,
+          },
+          {
+            id: 5,
+            question: "बाहरी फर्नीचर के लिए कौन सी लकड़ी सबसे अच्छी?",
+            options: ["पाइन", "टीक", "MDF", "बाल्सा"],
+            correctIndex: 1,
+          },
+          {
+            id: 6,
+            question: "लकड़ी में 'अनाज की दिशा' किसे प्रभावित करती है?",
+            options: ["रंग", "वजन", "मजबूती और दरार", "कीमत"],
+            correctIndex: 2,
+          },
+          {
+            id: 7,
+            question: "वीडियो में दिखाया गया स्क्रू किस प्रकार का है?",
+            options: ["फिलिप्स", "फ्लैट", "टोर्क्स", "हेक्स"],
+            correctIndex: 0,
+          },
+          {
+            id: 8,
+            question: "वुड पुट्टी का उद्देश्य?",
+            options: ["तख्तों को जोड़ना", "छेद/गैप भरना", "वाटरप्रूफिंग", "स्टेनिंग"],
+            correctIndex: 1,
+          },
+          {
+            id: 9,
+            question: "काटते समय आवश्यक सुरक्षा गियर?",
+            options: ["केवल दस्ताने", "चश्मा और मास्क", "केवल एप्रन", "कुछ नहीं"],
+            correctIndex: 1,
+          },
+        ],
+        practical: {
+          id: 10,
+          description:
+            "एक साधारण लकड़ी का बॉक्स फ्रेम बनाएं। खुद को माप, काट और जोड़ते हुए रिकॉर्ड करें।",
+        },
+      };
+    }
+    // English (en), Malayalam (ml), Kannada (kn) — English fallback
     return {
       mcq: [
         {
@@ -120,13 +286,156 @@ function getQuestionBank(skill: string): QuestionBank {
     };
   }
 
-  if (
-    s.includes("tailor") ||
-    s.includes("seam") ||
-    s.includes("stitch") ||
-    s.includes("దర్జీ") ||
-    s.includes("दर्जी")
-  ) {
+  // ── Tailor ─────────────────────────────────────────────────────────────────
+  if (isTailor) {
+    if (lang === "te") {
+      return {
+        mcq: [
+          {
+            id: 1,
+            question: "రెండు బట్ట ముక్కలు కలపడానికి ఏ కుట్టు ఉపయోగిస్తారు?",
+            options: ["చైన్ కుట్టు", "రన్నింగ్ కుట్టు", "స్ట్రెయిట్ కుట్టు", "జిగ్‌జాగ్ కుట్టు"],
+            correctIndex: 2,
+          },
+          {
+            id: 2,
+            question: "వీడియోలో చూపిన బట్ట ఏది?",
+            options: ["కాటన్", "సిల్క్", "పాలిస్టర్", "ఉల్"],
+            correctIndex: 0,
+          },
+          {
+            id: 3,
+            question: "దుస్తులకు స్టాండర్డ్ సీమ్ అలవెన్స్ ఎంత?",
+            options: ["5mm", "10mm", "15mm", "20mm"],
+            correctIndex: 2,
+          },
+          {
+            id: 4,
+            question: "బట్టపై కటింగ్ లైన్లు గుర్తించడానికి ఏ టూల్ ఉపయోగిస్తారు?",
+            options: ["పెన్", "చాక్", "మార్కర్", "పెన్సిల్"],
+            correctIndex: 1,
+          },
+          {
+            id: 5,
+            question: "కట్ చేయడానికి ముందు బట్ట ఎలా సిద్ధం చేయాలి?",
+            options: ["ఇస్త్రీ చేయి", "ఉతికి ఇస్త్రీ చేయి", "కేవలం కట్ చేయి", "తడిపించు"],
+            correctIndex: 1,
+          },
+          {
+            id: 6,
+            question: "బాస్టింగ్ కుట్టు యొక్క ప్రయోజనం ఏమిటి?",
+            options: ["అంతిమ జాయినింగ్", "తాత్కాలిక పట్టు", "అలంకరణ", "వాటర్‌ప్రూఫింగ్"],
+            correctIndex: 1,
+          },
+          {
+            id: 7,
+            question: "భారీ బట్టకు ఏ సూది బెస్ట్?",
+            options: ["9/65", "11/75", "16/100", "8/60"],
+            correctIndex: 2,
+          },
+          {
+            id: 8,
+            question: "పాటర్న్ మేకింగ్‌లో 'ఈజ్' అంటే ఏమిటి?",
+            options: ["స్ట్రెచ్", "కదలికకు అదనపు స్థలం", "బిగుతు", "ఒక కుట్టు రకం"],
+            correctIndex: 1,
+          },
+          {
+            id: 9,
+            question: "పర్ఫెక్ట్ హెమ్ కోసం ఏమి చేయాలి?",
+            options: [
+              "రెండుసార్లు మడవండి మరియు కుట్టండి",
+              "గ్లూ వాడండి",
+              "రా వదిలేయండి",
+              "తక్కువగా కట్ చేయండి",
+            ],
+            correctIndex: 0,
+          },
+        ],
+        practical: {
+          id: 10,
+          description:
+            "ఒక బట్ట ముక్కపై స్ట్రెయిట్ హెమ్ కొలిచి కుట్టండి. మీరు చేస్తుండగా రికార్డ్ చేయండి.",
+        },
+      };
+    }
+    if (lang === "hi") {
+      return {
+        mcq: [
+          {
+            id: 1,
+            question:
+              "दो कपड़े के टुकड़ों को जोड़ने के लिए कौन सी सिलाई उपयोग की जाती है?",
+            options: ["चेन स्टिच", "रनिंग स्टिच", "स्ट्रेट स्टिच", "जिगजैग स्टिच"],
+            correctIndex: 2,
+          },
+          {
+            id: 2,
+            question: "वीडियो में दिखाया गया कपड़ा कौन सा है?",
+            options: ["कॉटन", "सिल्क", "पॉलिएस्टर", "ऊन"],
+            correctIndex: 0,
+          },
+          {
+            id: 3,
+            question: "कपड़ों के लिए मानक सीम अलाउंस क्या है?",
+            options: ["5mm", "10mm", "15mm", "20mm"],
+            correctIndex: 2,
+          },
+          {
+            id: 4,
+            question:
+              "कपड़े पर कटिंग लाइन चिह्नित करने के लिए कौन सा टूल उपयोग करते हैं?",
+            options: ["पेन", "चॉक", "मार्कर", "पेंसिल"],
+            correctIndex: 1,
+          },
+          {
+            id: 5,
+            question: "काटने से पहले कपड़े को कैसे तैयार करें?",
+            options: ["इस्त्री करें", "धोएं और इस्त्री करें", "बस काट लें", "गीला करें"],
+            correctIndex: 1,
+          },
+          {
+            id: 6,
+            question: "बेस्टिंग स्टिच का उद्देश्य क्या है?",
+            options: ["अंतिम जोड़", "अस्थायी पकड़", "सजावट", "वाटरप्रूफिंग"],
+            correctIndex: 1,
+          },
+          {
+            id: 7,
+            question: "भारी कपड़े के लिए कौन सी सुई सबसे अच्छी है?",
+            options: ["9/65", "11/75", "16/100", "8/60"],
+            correctIndex: 2,
+          },
+          {
+            id: 8,
+            question: "पैटर्न मेकिंग में 'ईज़' क्या है?",
+            options: [
+              "खिंचाव",
+              "हिलने के लिए अतिरिक्त जगह",
+              "कसाव",
+              "एक सिलाई प्रकार",
+            ],
+            correctIndex: 1,
+          },
+          {
+            id: 9,
+            question: "एक सही हेम के लिए क्या करना चाहिए?",
+            options: [
+              "दो बार मोड़ें और सिलें",
+              "गोंद इस्तेमाल करें",
+              "कच्चा छोड़ें",
+              "छोटा काट लें",
+            ],
+            correctIndex: 0,
+          },
+        ],
+        practical: {
+          id: 10,
+          description:
+            "एक कपड़े के टुकड़े पर सीधी हेम मापें और सिलें। खुद को करते हुए रिकॉर्ड करें।",
+        },
+      };
+    }
+    // English fallback (ml, kn, en)
     return {
       mcq: [
         {
@@ -212,12 +521,144 @@ function getQuestionBank(skill: string): QuestionBank {
     };
   }
 
-  if (
-    s.includes("plumb") ||
-    s.includes("pipe") ||
-    s.includes("పైప్") ||
-    s.includes("प्लंबर")
-  ) {
+  // ── Plumber ────────────────────────────────────────────────────────────────
+  if (isPlumber) {
+    if (lang === "te") {
+      return {
+        mcq: [
+          {
+            id: 1,
+            question: "వీడియోలో చూపిన పైప్ ఫిట్టింగ్ రకం ఏది?",
+            options: ["ఎల్బో", "టీ", "కప్లర్", "రెడ్యూసర్"],
+            correctIndex: 1,
+          },
+          {
+            id: 2,
+            question: "వేడి నీటికి ఏ పైప్ మెటీరియల్ బెస్ట్?",
+            options: ["PVC", "CPVC", "HDPE", "ఐరన్"],
+            correctIndex: 1,
+          },
+          {
+            id: 3,
+            question: "డ్రెయినేజ్ పైపులకు సరైన స్లోప్ ఎంత?",
+            options: ["0.5%", "1%", "2%", "5%"],
+            correctIndex: 2,
+          },
+          {
+            id: 4,
+            question: "కాపర్ పైపులు కట్ చేయడానికి ఏ టూల్ వాడాలి?",
+            options: ["హ్యాక్సా", "పైప్ కట్టర్", "గ్రైండర్", "చిజెల్"],
+            correctIndex: 1,
+          },
+          {
+            id: 5,
+            question: "పైప్ థ్రెడ్స్ కోసం ఏ సీలెంట్ వాడాలి?",
+            options: ["ఫెవికాల్", "టెఫ్లాన్ టేప్", "సిలికోన్", "ఎపాక్సీ"],
+            correctIndex: 1,
+          },
+          {
+            id: 6,
+            question: "ప్లంబింగ్ తర్వాత ఏ ప్రెషర్ టెస్ట్ చేస్తారు?",
+            options: ["టెంపరేచర్ టెస్ట్", "వాటర్ ప్రెషర్ టెస్ట్", "గ్యాస్ టెస్ట్", "ఏదీ లేదు"],
+            correctIndex: 1,
+          },
+          {
+            id: 7,
+            question: "P-ట్రాప్ దేన్ని నిరోధిస్తుంది?",
+            options: ["నీటి ప్రవాహం", "మురుగు వాయువులు", "లీకేజీలు", "ప్రెషర్ తగ్గుదల"],
+            correctIndex: 1,
+          },
+          {
+            id: 8,
+            question: "నీటి ప్రవాహాన్ని పూర్తిగా ఆపే వాల్వ్ ఏది?",
+            options: ["బాల్ వాల్వ్", "గేట్ వాల్వ్", "చెక్ వాల్వ్", "ఫ్లోట్ వాల్వ్"],
+            correctIndex: 0,
+          },
+          {
+            id: 9,
+            question: "లీకవుతున్న జాయింట్ కోసం మొదట ఏమి చేయాలి?",
+            options: ["పైప్ రీప్లేస్ చేయి", "ఫిట్టింగ్ టైట్ చేయి", "సీలెంట్ వేయి", "సూపర్‌వైజర్‌ని పిలవు"],
+            correctIndex: 1,
+          },
+        ],
+        practical: {
+          id: 10,
+          description:
+            "సిమ్యులేటెడ్ పైప్ జాయింట్ లీక్ ఫిక్స్ చేయండి. మీరు సమస్య గుర్తించి పరిష్కరించడం రికార్డ్ చేయండి.",
+        },
+      };
+    }
+    if (lang === "hi") {
+      return {
+        mcq: [
+          {
+            id: 1,
+            question: "वीडियो में दिखाया गया पाइप फिटिंग कौन सा है?",
+            options: ["एल्बो", "टी", "कपलर", "रेड्यूसर"],
+            correctIndex: 1,
+          },
+          {
+            id: 2,
+            question: "गर्म पानी के लिए कौन सा पाइप सामग्री सबसे अच्छी है?",
+            options: ["PVC", "CPVC", "HDPE", "आयरन"],
+            correctIndex: 1,
+          },
+          {
+            id: 3,
+            question: "ड्रेनेज पाइप के लिए सही ढलान क्या है?",
+            options: ["0.5%", "1%", "2%", "5%"],
+            correctIndex: 2,
+          },
+          {
+            id: 4,
+            question: "तांबे के पाइप काटने के लिए कौन सा उपकरण उपयोग करते हैं?",
+            options: ["हैकसॉ", "पाइप कटर", "ग्राइंडर", "छेनी"],
+            correctIndex: 1,
+          },
+          {
+            id: 5,
+            question: "पाइप थ्रेड के लिए कौन सा सीलेंट उपयोग करते हैं?",
+            options: ["फेविकॉल", "टेफ्लॉन टेप", "सिलिकॉन", "एपॉक्सी"],
+            correctIndex: 1,
+          },
+          {
+            id: 6,
+            question: "प्लंबिंग के बाद कौन सा दबाव परीक्षण किया जाता है?",
+            options: [
+              "तापमान परीक्षण",
+              "पानी दबाव परीक्षण",
+              "गैस परीक्षण",
+              "कोई नहीं",
+            ],
+            correctIndex: 1,
+          },
+          {
+            id: 7,
+            question: "P-ट्रैप क्या रोकता है?",
+            options: ["पानी का बहाव", "सीवर गैसें", "रिसाव", "दबाव में गिरावट"],
+            correctIndex: 1,
+          },
+          {
+            id: 8,
+            question: "कौन सा वाल्व पानी का बहाव पूरी तरह रोकता है?",
+            options: ["बॉल वाल्व", "गेट वाल्व", "चेक वाल्व", "फ्लोट वाल्व"],
+            correctIndex: 0,
+          },
+          {
+            id: 9,
+            question: "लीकिंग जॉइंट के लिए सबसे पहले क्या करें?",
+            options: ["पाइप बदलें", "फिटिंग कसें", "सीलेंट लगाएं", "सुपरवाइजर को बुलाएं"],
+            correctIndex: 1,
+          },
+        ],
+        practical: {
+          id: 10,
+          description:
+            "एक नकली पाइप जॉइंट लीक ठीक करें। खुद को समस्या पहचानते और ठीक करते हुए रिकॉर्ड करें।",
+        },
+      };
+    }
+    // English fallback
     return {
       mcq: [
         {
@@ -293,7 +734,175 @@ function getQuestionBank(skill: string): QuestionBank {
     };
   }
 
-  // Generic fallback
+  // ── Generic fallback (all other skills) ───────────────────────────────────
+  if (lang === "te") {
+    return {
+      mcq: [
+        {
+          id: 1,
+          question: "ఈ పని కోసం ఏ సేఫ్టీ ఎక్విప్‌మెంట్ అవసరం?",
+          options: ["గ్లోవ్స్", "గాగుల్స్", "మాస్క్", "అన్నీ"],
+          correctIndex: 3,
+        },
+        {
+          id: 2,
+          question: "ఏ పని మొదలుపెట్టే ముందు మొదటి స్టెప్?",
+          options: [
+            "పని ప్రారంభించు",
+            "టూల్స్ మరియు మెటీరియల్ అసెస్ చేయి",
+            "సూపర్‌వైజర్‌ని పిలవు",
+            "ఇన్‌స్పెక్షన్ స్కిప్ చేయి",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 3,
+          question: "ప్రెసిషన్ వర్క్ కోసం అత్యంత ముఖ్యమైన టూల్?",
+          options: ["రూలర్/మెజరింగ్ టేప్", "హ్యామర్", "బ్రష్", "రెంచ్"],
+          correctIndex: 0,
+        },
+        {
+          id: 4,
+          question: "టూల్స్ ఎలా మెయింటెయిన్ చేయాలి?",
+          options: [
+            "మెయింటెనెన్స్ పట్టించుకోకు",
+            "రెగ్యులర్‌గా క్లీన్ చేసి ఆయిల్ వేయి",
+            "ప్రతి నెలా రీప్లేస్ చేయి",
+            "మురికిగా వదిలేయి",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 5,
+          question: "టూల్ పాడైతే ఏమి చేయాలి?",
+          options: ["అలాగే వాడు", "రిపోర్ట్ చేసి రీప్లేస్ చేయి", "దాచిపెట్టు", "స్వయంగా రిపేర్ చేయి"],
+          correctIndex: 1,
+        },
+        {
+          id: 6,
+          question: "వేస్ట్ డిస్పోసల్ కోసం బెస్ట్ ప్రాక్టీస్?",
+          options: ["నేలపై వదిలేయి", "నిర్ణీత చోట వేయి", "కాల్చు", "పాతిపెట్టు"],
+          correctIndex: 1,
+        },
+        {
+          id: 7,
+          question: "పదునైన టూల్స్‌తో పని చేసేటప్పుడు?",
+          options: [
+            "తొందర పడు",
+            "నెమ్మదిగా జాగ్రత్తగా పని చేయి",
+            "బేర్ హ్యాండ్స్‌తో వాడు",
+            "సేఫ్టీ రూల్స్ పట్టించుకోకు",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 8,
+          question: "కస్టమర్ సంతృప్తి ఎలా సాధించాలి?",
+          options: ["వేగంగా పని", "నాణ్యమైన పని", "చీప్ మెటీరియల్స్", "A మరియు B రెండూ"],
+          correctIndex: 1,
+        },
+        {
+          id: 9,
+          question: "కస్టమర్ ఫిర్యాదును ఎలా హ్యాండిల్ చేయాలి?",
+          options: ["ఇగ్నోర్ చేయి", "వినాలి మరియు పరిష్కరించాలి", "వాదించు", "వెళ్ళిపో"],
+          correctIndex: 1,
+        },
+      ],
+      practical: {
+        id: 10,
+        description:
+          "మీ నైపుణ్యం నుండి ఒక కోర్ టాస్క్ ప్రదర్శించండి. మీరు వృత్తిపరంగా పని చేస్తుండగా రికార్డ్ చేయండి.",
+      },
+    };
+  }
+
+  if (lang === "hi") {
+    return {
+      mcq: [
+        {
+          id: 1,
+          question: "इस काम के लिए क्या safety equipment जरूरी है?",
+          options: ["दस्ताने", "चश्मा", "मास्क", "सभी"],
+          correctIndex: 3,
+        },
+        {
+          id: 2,
+          question: "कोई भी व्यावसायिक कार्य शुरू करने से पहले पहला कदम?",
+          options: [
+            "काम शुरू करें",
+            "टूल्स और सामग्री का मूल्यांकन करें",
+            "सुपरवाइजर को कॉल करें",
+            "निरीक्षण छोड़ें",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 3,
+          question: "सटीक काम के लिए सबसे महत्वपूर्ण उपकरण?",
+          options: ["रूलर/मेजरिंग टेप", "हथौड़ा", "ब्रश", "रेंच"],
+          correctIndex: 0,
+        },
+        {
+          id: 4,
+          question: "टूल्स कैसे रखरखाव करें?",
+          options: [
+            "रखरखाव की अनदेखी",
+            "नियमित सफाई और तेल",
+            "हर महीने बदलें",
+            "गंदा छोड़ें",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 5,
+          question: "अगर टूल खराब हो तो?",
+          options: [
+            "फिर भी इस्तेमाल करें",
+            "रिपोर्ट करें और बदलें",
+            "छुपाएं",
+            "खुद ठीक करें",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 6,
+          question: "अपशिष्ट निपटान के लिए सर्वोत्तम अभ्यास?",
+          options: ["जमीन पर छोड़ें", "निर्धारित स्थान पर डालें", "जलाएं", "दफनाएं"],
+          correctIndex: 1,
+        },
+        {
+          id: 7,
+          question: "तेज उपकरणों के साथ काम करते समय?",
+          options: [
+            "जल्दी करें",
+            "धीरे और सावधानी से काम करें",
+            "नंगे हाथों से उपयोग करें",
+            "सुरक्षा नियमों की अनदेखी",
+          ],
+          correctIndex: 1,
+        },
+        {
+          id: 8,
+          question: "ग्राहक संतुष्टि कैसे प्राप्त करें?",
+          options: ["तेज काम", "गुणवत्ता काम", "सस्ती सामग्री", "A और B दोनों"],
+          correctIndex: 1,
+        },
+        {
+          id: 9,
+          question: "ग्राहक की शिकायत कैसे संभालें?",
+          options: ["नजरअंदाज करें", "सुनें और हल करें", "बहस करें", "चले जाएं"],
+          correctIndex: 1,
+        },
+      ],
+      practical: {
+        id: 10,
+        description:
+          "अपने कौशल से एक मुख्य कार्य प्रदर्शित करें। खुद को पेशेवर तरीके से काम करते हुए रिकॉर्ड करें।",
+      },
+    };
+  }
+
+  // English / Malayalam / Kannada fallback
   return {
     mcq: [
       {
@@ -446,7 +1055,8 @@ export function CertificationTestPage() {
   const { t, lang } = useLang();
 
   const skill = authUser?.skill ?? "General";
-  const bank = getQuestionBank(skill);
+  // Recalculate bank reactively when language changes
+  const bank = useMemo(() => getQuestionBank(skill, lang), [skill, lang]);
 
   // Map language codes to display names for the active language label
   const LANG_NAMES: Record<string, string> = {
@@ -466,6 +1076,26 @@ export function CertificationTestPage() {
   const [practicalFile, setPracticalFile] = useState<File | null>(null);
   const [result, setResult] = useState<TestResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-read question aloud when phase or question changes
+  useEffect(() => {
+    if (phase === "mcq") {
+      speakText(bank.mcq[currentQ].question, lang);
+    }
+  }, [phase, currentQ, lang, bank]);
+
+  useEffect(() => {
+    if (phase === "practical") {
+      speakText(bank.practical.description, lang);
+    }
+  }, [phase, lang, bank]);
+
+  // Stop speech on unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   const submitMutation = useMutation({
     mutationFn: async ({

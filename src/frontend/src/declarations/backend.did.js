@@ -8,18 +8,16 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const Time = IDL.Int;
-export const LearningRequest = IDL.Record({
+export const Citizen = IDL.Record({
   'id' : IDL.Nat,
-  'message' : IDL.Text,
-  'timestamp' : Time,
-  'requesterId' : IDL.Text,
-  'targetUserId' : IDL.Nat,
+  'name' : IDL.Text,
+  'address' : IDL.Text,
 });
 export const User = IDL.Record({
   'id' : IDL.Nat,
   'bio' : IDL.Text,
   'badgeLevel' : IDL.Text,
+  'contact' : IDL.Text,
   'name' : IDL.Text,
   'trustScore' : IDL.Nat,
   'endorsementCount' : IDL.Nat,
@@ -27,6 +25,14 @@ export const User = IDL.Record({
   'skill' : IDL.Text,
   'videoURL' : IDL.Text,
   'location' : IDL.Text,
+});
+export const Time = IDL.Int;
+export const LearningRequest = IDL.Record({
+  'id' : IDL.Nat,
+  'message' : IDL.Text,
+  'timestamp' : Time,
+  'requesterId' : IDL.Text,
+  'targetUserId' : IDL.Nat,
 });
 export const CertificationResult = IDL.Record({
   'workerId' : IDL.Nat,
@@ -40,7 +46,10 @@ export const CertificationResult = IDL.Record({
 });
 
 export const idlService = IDL.Service({
+  'clearAllData' : IDL.Func([], [], []),
   'endorseUser' : IDL.Func([IDL.Nat], [], []),
+  'findCitizenByName' : IDL.Func([IDL.Text], [IDL.Opt(Citizen)], ['query']),
+  'findWorkerByName' : IDL.Func([IDL.Text], [IDL.Opt(User)], ['query']),
   'getAllLearningRequests' : IDL.Func(
       [],
       [IDL.Vec(LearningRequest)],
@@ -64,7 +73,7 @@ export const idlService = IDL.Service({
   'init' : IDL.Func([], [], []),
   'registerCitizen' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
   'registerWorker' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
       [IDL.Nat],
       [],
     ),
@@ -76,18 +85,16 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const Time = IDL.Int;
-  const LearningRequest = IDL.Record({
+  const Citizen = IDL.Record({
     'id' : IDL.Nat,
-    'message' : IDL.Text,
-    'timestamp' : Time,
-    'requesterId' : IDL.Text,
-    'targetUserId' : IDL.Nat,
+    'name' : IDL.Text,
+    'address' : IDL.Text,
   });
   const User = IDL.Record({
     'id' : IDL.Nat,
     'bio' : IDL.Text,
     'badgeLevel' : IDL.Text,
+    'contact' : IDL.Text,
     'name' : IDL.Text,
     'trustScore' : IDL.Nat,
     'endorsementCount' : IDL.Nat,
@@ -95,6 +102,14 @@ export const idlFactory = ({ IDL }) => {
     'skill' : IDL.Text,
     'videoURL' : IDL.Text,
     'location' : IDL.Text,
+  });
+  const Time = IDL.Int;
+  const LearningRequest = IDL.Record({
+    'id' : IDL.Nat,
+    'message' : IDL.Text,
+    'timestamp' : Time,
+    'requesterId' : IDL.Text,
+    'targetUserId' : IDL.Nat,
   });
   const CertificationResult = IDL.Record({
     'workerId' : IDL.Nat,
@@ -108,7 +123,10 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    'clearAllData' : IDL.Func([], [], []),
     'endorseUser' : IDL.Func([IDL.Nat], [], []),
+    'findCitizenByName' : IDL.Func([IDL.Text], [IDL.Opt(Citizen)], ['query']),
+    'findWorkerByName' : IDL.Func([IDL.Text], [IDL.Opt(User)], ['query']),
     'getAllLearningRequests' : IDL.Func(
         [],
         [IDL.Vec(LearningRequest)],
@@ -132,7 +150,7 @@ export const idlFactory = ({ IDL }) => {
     'init' : IDL.Func([], [], []),
     'registerCitizen' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
     'registerWorker' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
         [IDL.Nat],
         [],
       ),

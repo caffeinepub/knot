@@ -18,12 +18,13 @@ import {
   User,
   Video,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { CertificationResult, LearningRequest } from "../backend.d.ts";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { getAuthUser } from "../utils/auth";
 import { getBadgeConfig, getSkillEmoji } from "../utils/helpers";
+import { getVideoObjectURL } from "../utils/videoDB";
 
 function StatCard({
   icon: Icon,
@@ -103,6 +104,42 @@ export function WorkerDashboardPage() {
     staleTime: 1000 * 60,
   });
 
+  const [videoURL, setVideoURL] = useState<string>("");
+
+  // Load video: first try IndexedDB (persisted), then session blob URL
+  useEffect(() => {
+    const workerId =
+      localStorage.getItem("knot_worker_id") ?? authUser?.id?.toString();
+    if (!workerId) {
+      // Fall back to session blob URL
+      const sessionUrl =
+        localStorage.getItem("knot_worker_video_preview_url") ?? "";
+      setVideoURL(sessionUrl);
+      return;
+    }
+    let objectUrl: string | null = null;
+    getVideoObjectURL(workerId)
+      .then((url) => {
+        if (url) {
+          objectUrl = url;
+          setVideoURL(url);
+        } else {
+          // Fall back to session blob URL
+          const sessionUrl =
+            localStorage.getItem("knot_worker_video_preview_url") ?? "";
+          setVideoURL(sessionUrl);
+        }
+      })
+      .catch(() => {
+        const sessionUrl =
+          localStorage.getItem("knot_worker_video_preview_url") ?? "";
+        setVideoURL(sessionUrl);
+      });
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [authUser?.id]);
+
   if (!authUser || authUser.role !== "worker") {
     return null;
   }
@@ -113,20 +150,6 @@ export function WorkerDashboardPage() {
   const badgeLevelDisplay = workerData?.badgeLevel ?? "—";
   const trustScore = workerData ? Number(workerData.trustScore) : 0;
   const endorsementCount = workerData ? Number(workerData.endorsementCount) : 0;
-
-  // Always prefer the locally-uploaded video preview (blob URL stored at registration time)
-  // Fall back to backend URL only if no local preview exists
-  const DUMMY_VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
-  const localPreviewUrl =
-    typeof window !== "undefined"
-      ? (localStorage.getItem("knot_worker_video_preview_url") ?? "")
-      : "";
-  const backendVideoUrl = workerData?.videoURL ?? "";
-  const videoURL =
-    localPreviewUrl ||
-    (backendVideoUrl && backendVideoUrl !== DUMMY_VIDEO_URL
-      ? backendVideoUrl
-      : "");
 
   return (
     <main className="flex-1 bg-background">

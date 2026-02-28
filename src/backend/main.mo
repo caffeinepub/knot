@@ -1,15 +1,13 @@
-import Text "mo:core/Text";
 import Nat "mo:core/Nat";
+import Text "mo:core/Text";
+import Time "mo:core/Time";
 import Array "mo:core/Array";
 import Order "mo:core/Order";
-import Time "mo:core/Time";
 import Runtime "mo:core/Runtime";
 import Iter "mo:core/Iter";
-import Migration "migration";
 
-(with migration = Migration.run)
 actor {
-  type User = {
+  public type User = {
     id : Nat;
     name : Text;
     skill : Text;
@@ -20,15 +18,16 @@ actor {
     distance : Nat;
     bio : Text;
     videoURL : Text;
+    contact : Text;
   };
 
-  type Citizen = {
+  public type Citizen = {
     id : Nat;
     name : Text;
     address : Text;
   };
 
-  type LearningRequest = {
+  public type LearningRequest = {
     id : Nat;
     requesterId : Text;
     targetUserId : Nat;
@@ -36,7 +35,7 @@ actor {
     timestamp : Time.Time;
   };
 
-  type CertificationResult = {
+  public type CertificationResult = {
     workerId : Nat;
     skill : Text;
     level : Text;
@@ -83,6 +82,16 @@ actor {
 
   public shared ({ caller }) func init() : async () {};
 
+  public shared ({ caller }) func clearAllData() : async () {
+    users := [];
+    citizens := [];
+    learningRequests := [];
+    certificationResults := [];
+    nextUserId := 1;
+    nextCitizenId := 1;
+    nextRequestId := 1;
+  };
+
   public query ({ caller }) func getAllUsers() : async [User] {
     users.sort(User.compareByRank);
   };
@@ -115,7 +124,15 @@ actor {
     ).sort(User.compareByRank);
   };
 
-  public shared ({ caller }) func registerWorker(name : Text, skill : Text, location : Text, bio : Text, videoURL : Text, distance : Nat) : async Nat {
+  public shared ({ caller }) func registerWorker(
+    name : Text,
+    skill : Text,
+    location : Text,
+    bio : Text,
+    videoURL : Text,
+    distance : Nat,
+    contact : Text,
+  ) : async Nat {
     let id = nextUserId;
     let newUser = {
       id;
@@ -128,6 +145,7 @@ actor {
       distance;
       bio;
       videoURL;
+      contact;
     };
     users := users.concat([newUser]);
     nextUserId += 1;
@@ -158,6 +176,7 @@ actor {
           distance = user.distance;
           bio = user.bio;
           videoURL = user.videoURL;
+          contact = user.contact;
         };
 
         users := users.map<User, User>(
@@ -233,5 +252,21 @@ actor {
     );
     found;
   };
-};
 
+  // === Backend Find by Full Name Functions @v3 ===
+  public query ({ caller }) func findWorkerByName(name : Text) : async ?User {
+    users.find(
+      func(user) {
+        user.name.toLower() == name.toLower();
+      }
+    );
+  };
+
+  public query ({ caller }) func findCitizenByName(name : Text) : async ?Citizen {
+    citizens.find(
+      func(citizen) {
+        citizen.name.toLower() == name.toLower();
+      }
+    );
+  };
+};

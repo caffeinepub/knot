@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Heart } from "lucide-react";
 import { useLang } from "../contexts/LanguageContext";
-import { SKILL_CATEGORIES, getTranslatedSkillName } from "../utils/helpers";
 
 export function Footer() {
   const { t } = useLang();
@@ -9,7 +8,7 @@ export function Footer() {
   return (
     <footer className="bg-navy mt-auto py-10">
       <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8">
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2.5 mb-3">
@@ -27,27 +26,6 @@ export function Footer() {
             <p className="text-white/50 text-sm font-body leading-relaxed">
               {t("home_hero_connect")}
             </p>
-          </div>
-
-          {/* Communities */}
-          <div>
-            <h4 className="font-display font-semibold text-white text-sm mb-3 tracking-wide uppercase">
-              {t("nav_communities")}
-            </h4>
-            <ul className="space-y-1.5">
-              {SKILL_CATEGORIES.filter((s) => s !== "All").map((skill) => (
-                <li key={skill}>
-                  <Link
-                    to="/community/$skill"
-                    params={{ skill }}
-                    className="text-white/50 hover:text-white/80 text-sm font-body transition-colors"
-                  >
-                    {getTranslatedSkillName(skill, t)}{" "}
-                    {t("nav_community_suffix")}
-                  </Link>
-                </li>
-              ))}
-            </ul>
           </div>
 
           {/* Quick links */}
