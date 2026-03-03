@@ -1235,6 +1235,25 @@ export function CertificationTestPage() {
       const workerIdStr = authUser.id.toString();
       localStorage.setItem(`knot_cert_status_${workerIdStr}`, "pending_review");
       localStorage.setItem(`knot_cert_mcq_${workerIdStr}`, mcqScore.toString());
+
+      // Save practical submission to localStorage so the admin panel can find it
+      try {
+        const base64ForAdmin = await readFileAsBase64(practicalFile!);
+        const practicalSubmission = {
+          workerId: workerIdStr,
+          workerName: authUser.name,
+          skill,
+          videoDataURI: base64ForAdmin,
+          status: "pending",
+          submittedAt: Date.now(),
+        };
+        localStorage.setItem(
+          `knot_practical_submission_${workerIdStr}`,
+          JSON.stringify(practicalSubmission),
+        );
+      } catch {
+        // Continue even if the base64 conversion fails (large files)
+      }
       // Save cert data as pending (not passed yet)
       localStorage.setItem(
         `knot_cert_${workerIdStr}`,

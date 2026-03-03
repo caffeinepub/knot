@@ -290,24 +290,30 @@ export function AdminDashboardPage() {
   } = useQuery<PracticalVideoSubmission[]>({
     queryKey: ["admin-practical-videos"],
     queryFn: async () => {
-      // Check localStorage for pending practical videos
-      const localPending: PracticalVideoSubmission[] = [];
+      // Check localStorage for ALL practical video submissions (pending + approved + rejected)
+      const localSubs: PracticalVideoSubmission[] = [];
       try {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if (key?.startsWith("knot_practical_submission_")) {
             const raw = localStorage.getItem(key);
             if (!raw) continue;
-            const sub = JSON.parse(raw);
-            if (sub.status === "pending") {
-              localPending.push({
+            try {
+              const sub = JSON.parse(raw);
+              localSubs.push({
                 workerId: BigInt(sub.workerId ?? 0),
                 workerName: sub.workerName ?? "Unknown",
                 skill: sub.skill ?? "—",
                 videoDataURI: sub.videoDataURI ?? "",
-                submittedAt: BigInt(sub.submittedAt ?? Date.now() * 1_000_000),
-                status: "pending",
+                submittedAt: BigInt(
+                  sub.submittedAt
+                    ? sub.submittedAt * 1_000_000
+                    : Date.now() * 1_000_000,
+                ),
+                status: sub.status ?? "pending",
               } as PracticalVideoSubmission);
+            } catch {
+              /**/
             }
           }
         }
@@ -315,18 +321,17 @@ export function AdminDashboardPage() {
         /**/
       }
 
-      if (!actor) return localPending;
+      // Also check backend for pending submissions
+      if (!actor) return localSubs;
       try {
         const backendSubs = await actor.getPendingPracticalVideos();
-        const backendIds = new Set(
-          backendSubs.map((s) => s.workerId.toString()),
+        const localIds = new Set(localSubs.map((s) => s.workerId.toString()));
+        const backendOnly = backendSubs.filter(
+          (s) => !localIds.has(s.workerId.toString()),
         );
-        const localOnly = localPending.filter(
-          (s) => !backendIds.has(s.workerId.toString()),
-        );
-        return [...backendSubs, ...localOnly];
+        return [...localSubs, ...backendOnly];
       } catch {
-        return localPending;
+        return localSubs;
       }
     },
     staleTime: 1000 * 15,
@@ -351,16 +356,18 @@ export function AdminDashboardPage() {
         if (certRaw) {
           try {
             const parsed = JSON.parse(certRaw);
+            const isApproved =
+              certStatus === "approved" || parsed.practicalPassed === true;
             results.push({
               workerId: w.id,
               skill: parsed.skill ?? w.skill,
               level: parsed.level ?? "Basic",
-              passed: !!parsed.passed,
+              passed: isApproved,
               issuedDate: BigInt(parsed.issuedDate ?? 0),
               certificateId: parsed.certificateId ?? "",
               mcqScore: BigInt(parsed.mcqScore ?? 0),
-              practicalPassed: certStatus === "approved",
-              workerName: w.name,
+              practicalPassed: isApproved,
+              workerName: parsed.workerName ?? w.name,
             });
           } catch {
             /**/
@@ -418,8 +425,64 @@ export function AdminDashboardPage() {
     } catch (err) {
       console.warn("Backend approve error:", err);
     }
-    // Notify worker via localStorage
     const workerIdStr = workerId.toString();
+
+    // Find worker info from submission
+    const submissionRaw = localStorage.getItem(
+      `knot_practical_submission_${workerIdStr}`,
+    );
+    let workerSkill = "General";
+    let workerName = "Worker";
+    let mcqScore = 6;
+    if (submissionRaw) {
+      try {
+        const sub = JSON.parse(submissionRaw);
+        workerSkill = sub.skill ?? workerSkill;
+        workerName = sub.workerName ?? workerName;
+      } catch {
+        /**/
+      }
+    }
+    const mcqRaw = localStorage.getItem(`knot_cert_mcq_${workerIdStr}`);
+    if (mcqRaw) mcqScore = Number.parseInt(mcqRaw, 10) || 6;
+
+    // Update cert record with practicalPassed: true so worker appears in Certified tab
+    const certId = `KNOT-${Date.now().toString(36).toUpperCase()}-${workerIdStr.slice(-4)}`;
+    const certRecord = {
+      passed: true,
+      skill: workerSkill,
+      mcqScore,
+      practicalPassed: true,
+      certificateId: certId,
+      level: "Basic",
+      issuedDate: Date.now(),
+      workerId: workerIdStr,
+      pendingReview: false,
+      workerName,
+    };
+    localStorage.setItem(
+      `knot_cert_${workerIdStr}`,
+      JSON.stringify(certRecord),
+    );
+    localStorage.setItem(`knot_cert_approved_${workerIdStr}`, "true");
+    localStorage.setItem("knot_cert_passed", "true");
+    localStorage.setItem(`knot_cert_status_${workerIdStr}`, "approved");
+
+    // Mark the practical submission as approved (remove from pending)
+    if (submissionRaw) {
+      try {
+        const sub = JSON.parse(submissionRaw);
+        sub.status = "approved";
+        localStorage.setItem(
+          `knot_practical_submission_${workerIdStr}`,
+          JSON.stringify(sub),
+        );
+      } catch {
+        /**/
+      }
+    }
+
+    // Notify worker via localStorage bell
     const notifKey = `knot_notifs_${workerIdStr}`;
     const newNotif = {
       id: `n-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -436,12 +499,10 @@ export function AdminDashboardPage() {
     } catch {
       // ignore
     }
-    // Mark cert as approved for this worker
-    localStorage.setItem(`knot_cert_approved_${workerIdStr}`, "true");
-    localStorage.setItem("knot_cert_passed", "true");
-    localStorage.setItem(`knot_cert_status_${workerIdStr}`, "approved");
-    toast.success("Practical video approved! Worker has been notified.");
+    toast.success("Practical video approved! Worker is now certified.");
     void refetchPractical();
+    void refetchCerts();
+    queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
   }
 
   async function handleRejectVideo(workerId: bigint) {
@@ -452,8 +513,28 @@ export function AdminDashboardPage() {
     } catch (err) {
       console.warn("Backend reject error:", err);
     }
-    // Notify worker via localStorage
     const workerIdStr = workerId.toString();
+
+    // Mark submission as rejected
+    const submissionRaw = localStorage.getItem(
+      `knot_practical_submission_${workerIdStr}`,
+    );
+    if (submissionRaw) {
+      try {
+        const sub = JSON.parse(submissionRaw);
+        sub.status = "rejected";
+        localStorage.setItem(
+          `knot_practical_submission_${workerIdStr}`,
+          JSON.stringify(sub),
+        );
+      } catch {
+        /**/
+      }
+    }
+
+    localStorage.setItem(`knot_cert_status_${workerIdStr}`, "rejected");
+
+    // Notify worker via localStorage bell
     const notifKey = `knot_notifs_${workerIdStr}`;
     const newNotif = {
       id: `n-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -470,7 +551,6 @@ export function AdminDashboardPage() {
     } catch {
       // ignore
     }
-    localStorage.setItem(`knot_cert_status_${workerIdStr}`, "rejected");
     toast.error("Practical video rejected. Worker has been notified.");
     void refetchPractical();
   }
@@ -683,7 +763,7 @@ export function AdminDashboardPage() {
               className="font-body text-sm data-[state=active]:bg-amber-600 data-[state=active]:text-white text-slate-400 rounded-lg transition-all"
             >
               <Award className="w-4 h-4 mr-1.5" />
-              Certifications ({certs.length})
+              Certified ({certs.filter((c) => c.practicalPassed).length})
             </TabsTrigger>
             <TabsTrigger
               value="practical"
@@ -691,7 +771,7 @@ export function AdminDashboardPage() {
               className="font-body text-sm data-[state=active]:bg-orange-600 data-[state=active]:text-white text-slate-400 rounded-lg transition-all"
             >
               <Video className="w-4 h-4 mr-1.5" />
-              Practical Videos ({practicalVideos.length})
+              Practical Approval ({practicalVideos.length})
             </TabsTrigger>
           </TabsList>
 
@@ -745,9 +825,6 @@ export function AdminDashboardPage() {
                             Endorsements
                           </TableHead>
                           <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
-                            Dist (km)
-                          </TableHead>
-                          <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
                             Contact
                           </TableHead>
                         </TableRow>
@@ -760,7 +837,7 @@ export function AdminDashboardPage() {
                             className="border-slate-700 hover:bg-slate-700/40 transition-colors"
                           >
                             <TableCell className="text-slate-500 font-mono text-xs">
-                              {worker.id.toString().slice(-6)}
+                              {idx + 1}
                             </TableCell>
                             <TableCell className="text-white font-body font-medium text-sm">
                               {worker.name}
@@ -779,9 +856,6 @@ export function AdminDashboardPage() {
                             </TableCell>
                             <TableCell className="text-slate-300 font-body text-sm">
                               {Number(worker.endorsementCount)}
-                            </TableCell>
-                            <TableCell className="text-slate-400 font-body text-xs">
-                              {Number(worker.distance)}
                             </TableCell>
                             <TableCell className="text-slate-400 font-body text-xs">
                               {worker.contact || (
@@ -847,7 +921,7 @@ export function AdminDashboardPage() {
                             className="border-slate-700 hover:bg-slate-700/40 transition-colors"
                           >
                             <TableCell className="text-slate-500 font-mono text-xs">
-                              {citizen.id.toString().slice(-6)}
+                              {idx + 1}
                             </TableCell>
                             <TableCell className="text-white font-body font-medium text-sm">
                               {citizen.name}
@@ -918,7 +992,7 @@ export function AdminDashboardPage() {
                             className="border-slate-700 hover:bg-slate-700/40 transition-colors"
                           >
                             <TableCell className="text-slate-500 font-mono text-xs">
-                              {req.id.toString().slice(-6)}
+                              {idx + 1}
                             </TableCell>
                             <TableCell className="text-white font-body text-sm">
                               {req.requesterId}
@@ -942,12 +1016,13 @@ export function AdminDashboardPage() {
             </Card>
           </TabsContent>
 
-          {/* Certifications Table */}
+          {/* Certified Workers Table */}
           <TabsContent value="certs">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader className="pb-3 border-b border-slate-700">
-                <CardTitle className="font-display text-base text-white">
-                  Certifications
+                <CardTitle className="font-display text-base text-white flex items-center gap-2">
+                  <Award className="w-4 h-4 text-amber-400" />
+                  Certified Workers
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -956,14 +1031,16 @@ export function AdminDashboardPage() {
                     data-ocid="admin.certs.loading_state"
                     className="py-12 text-center text-slate-400 font-body text-sm"
                   >
-                    Loading certifications…
+                    Loading certified workers…
                   </div>
-                ) : certs.length === 0 ? (
+                ) : certs.filter((c) => c.practicalPassed).length === 0 ? (
                   <div
                     data-ocid="admin.certs.empty_state"
                     className="py-12 text-center text-slate-400 font-body text-sm"
                   >
-                    No certifications issued yet.
+                    <Award className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                    No certified workers yet. Approve practical videos to
+                    certify workers.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -971,7 +1048,10 @@ export function AdminDashboardPage() {
                       <TableHeader>
                         <TableRow className="border-slate-700 hover:bg-transparent">
                           <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
-                            Worker
+                            #
+                          </TableHead>
+                          <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
+                            Worker Name
                           </TableHead>
                           <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
                             Skill
@@ -980,59 +1060,53 @@ export function AdminDashboardPage() {
                             Level
                           </TableHead>
                           <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
-                            Passed
-                          </TableHead>
-                          <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
                             MCQ Score
                           </TableHead>
                           <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
-                            Date Issued
+                            Certified On
                           </TableHead>
                           <TableHead className="text-slate-400 font-body text-xs uppercase tracking-wider">
-                            Certificate ID
+                            Status
                           </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {certs.map((cert, idx) => (
-                          <TableRow
-                            key={cert.certificateId}
-                            data-ocid={`admin.certs.item.${idx + 1}`}
-                            className="border-slate-700 hover:bg-slate-700/40 transition-colors"
-                          >
-                            <TableCell className="text-white font-body font-medium text-sm">
-                              {cert.workerName}
-                            </TableCell>
-                            <TableCell className="text-slate-300 font-body text-sm">
-                              {cert.skill}
-                            </TableCell>
-                            <TableCell className="text-amber-400 font-body text-sm font-semibold">
-                              {cert.level}
-                            </TableCell>
-                            <TableCell>
-                              {cert.passed ? (
-                                <div className="flex items-center gap-1 text-green-400">
+                        {certs
+                          .filter((c) => c.practicalPassed)
+                          .map((cert, idx) => (
+                            <TableRow
+                              key={cert.certificateId || idx}
+                              data-ocid={`admin.certs.item.${idx + 1}`}
+                              className="border-slate-700 hover:bg-slate-700/40 transition-colors"
+                            >
+                              <TableCell className="text-slate-500 font-mono text-xs">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="text-white font-body font-medium text-sm">
+                                {cert.workerName}
+                              </TableCell>
+                              <TableCell className="text-slate-300 font-body text-sm">
+                                {cert.skill}
+                              </TableCell>
+                              <TableCell className="text-amber-400 font-body text-sm font-semibold">
+                                {cert.level || "Basic"}
+                              </TableCell>
+                              <TableCell className="text-slate-300 font-body text-sm">
+                                {Number(cert.mcqScore)} / 9
+                              </TableCell>
+                              <TableCell className="text-slate-500 font-body text-xs whitespace-nowrap">
+                                {formatTimestamp(cert.issuedDate)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1.5 text-green-400">
                                   <CheckCircle className="w-4 h-4" />
-                                  <span className="font-body text-xs">Yes</span>
+                                  <span className="font-body text-xs font-semibold">
+                                    Certified
+                                  </span>
                                 </div>
-                              ) : (
-                                <div className="flex items-center gap-1 text-red-400">
-                                  <XCircle className="w-4 h-4" />
-                                  <span className="font-body text-xs">No</span>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-slate-300 font-body text-sm">
-                              {Number(cert.mcqScore)} / 9
-                            </TableCell>
-                            <TableCell className="text-slate-500 font-body text-xs whitespace-nowrap">
-                              {formatTimestamp(cert.issuedDate)}
-                            </TableCell>
-                            <TableCell className="text-slate-500 font-mono text-xs">
-                              {cert.certificateId}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                            </TableRow>
+                          ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -1040,13 +1114,13 @@ export function AdminDashboardPage() {
               </CardContent>
             </Card>
           </TabsContent>
-          {/* Practical Videos Tab */}
+          {/* Practical Approval Tab */}
           <TabsContent value="practical">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader className="pb-3 border-b border-slate-700">
                 <CardTitle className="font-display text-base text-white flex items-center gap-2">
                   <Clock className="w-4 h-4 text-orange-400" />
-                  Pending Practical Video Reviews
+                  Practical Approval — Pending Video Reviews
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4">
@@ -1084,10 +1158,22 @@ export function AdminDashboardPage() {
                               {formatTimestamp(submission.submittedAt)}
                             </p>
                           </div>
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 text-xs font-body font-semibold border border-orange-500/30">
-                            <Clock className="w-3 h-3" />
-                            {submission.status}
-                          </span>
+                          {submission.status === "approved" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/20 text-green-300 text-xs font-body font-semibold border border-green-500/30">
+                              <CheckCircle className="w-3 h-3" />
+                              Approved
+                            </span>
+                          ) : submission.status === "rejected" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-body font-semibold border border-red-500/30">
+                              <XCircle className="w-3 h-3" />
+                              Rejected
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 text-xs font-body font-semibold border border-orange-500/30">
+                              <Clock className="w-3 h-3" />
+                              Pending Review
+                            </span>
+                          )}
                         </div>
                         {/* Video player */}
                         {submission.videoDataURI &&
@@ -1112,31 +1198,41 @@ export function AdminDashboardPage() {
                             </div>
                           </div>
                         )}
-                        {/* Action buttons */}
-                        <div className="flex gap-3 p-4">
-                          <button
-                            type="button"
-                            data-ocid={`admin.practical.approve.button.${idx + 1}`}
-                            onClick={() =>
-                              handleApproveVideo(submission.workerId)
-                            }
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-green-600 hover:bg-green-500 text-white font-body font-semibold text-sm transition-colors"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            data-ocid={`admin.practical.reject.button.${idx + 1}`}
-                            onClick={() =>
-                              handleRejectVideo(submission.workerId)
-                            }
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-red-700 hover:bg-red-600 text-white font-body font-semibold text-sm transition-colors"
-                          >
-                            <XCircle className="w-4 h-4" />
-                            Reject
-                          </button>
-                        </div>
+                        {/* Action buttons — only show for pending */}
+                        {submission.status === "pending" ? (
+                          <div className="flex gap-3 p-4">
+                            <button
+                              type="button"
+                              data-ocid={`admin.practical.approve.button.${idx + 1}`}
+                              onClick={() =>
+                                handleApproveVideo(submission.workerId)
+                              }
+                              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-green-600 hover:bg-green-500 text-white font-body font-semibold text-sm transition-colors"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              Approve & Certify
+                            </button>
+                            <button
+                              type="button"
+                              data-ocid={`admin.practical.reject.button.${idx + 1}`}
+                              onClick={() =>
+                                handleRejectVideo(submission.workerId)
+                              }
+                              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-red-700 hover:bg-red-600 text-white font-body font-semibold text-sm transition-colors"
+                            >
+                              <XCircle className="w-4 h-4" />
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="px-4 py-3 text-center">
+                            <p className="font-body text-xs text-slate-500">
+                              {submission.status === "approved"
+                                ? "✅ You approved this video. Worker has been certified."
+                                : "❌ You rejected this video. Worker has been notified to retake."}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
