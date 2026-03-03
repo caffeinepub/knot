@@ -13,6 +13,7 @@ import { Navbar } from "./components/Navbar";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { NotificationsProvider } from "./contexts/NotificationsContext";
 import { useActor } from "./hooks/useActor";
+import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 import { CertificatePage } from "./pages/CertificatePage";
 import { CertificationTestPage } from "./pages/CertificationTestPage";
 import { CommunityPage } from "./pages/CommunityPage";
@@ -28,31 +29,28 @@ function AppInitializer() {
 
   useEffect(() => {
     if (!actor) return;
-    actor
-      .init()
-      .then(async () => {
-        // One-time data reset: clear all previous registrations
-        const cleared = localStorage.getItem("knot_data_cleared_v2");
-        if (!cleared) {
-          try {
-            await actor.clearAllData();
-          } catch (err) {
-            console.warn("clearAllData failed:", err);
-          }
-          localStorage.setItem("knot_data_cleared_v2", "true");
-          // Clear all auth/session data
-          clearAuthUser();
-          localStorage.removeItem("knot_worker_video_preview_url");
-          localStorage.removeItem("knot_cert_passed");
-          localStorage.removeItem("knot_worker_video");
-          localStorage.removeItem("knot_worker_id");
-          // Redirect to login for a fresh start
-          window.location.href = "/login";
+    // One-time data reset: clear all previous registrations
+    const cleared = localStorage.getItem("knot_data_cleared_v2");
+    if (!cleared) {
+      (async () => {
+        try {
+          await actor.clearAllData();
+        } catch (err) {
+          console.warn("clearAllData failed:", err);
         }
-      })
-      .catch((err: unknown) => {
+        localStorage.setItem("knot_data_cleared_v2", "true");
+        // Clear all auth/session data
+        clearAuthUser();
+        localStorage.removeItem("knot_worker_video_preview_url");
+        localStorage.removeItem("knot_cert_passed");
+        localStorage.removeItem("knot_worker_video");
+        localStorage.removeItem("knot_worker_id");
+        // Redirect to login for a fresh start
+        window.location.href = "/login";
+      })().catch((err: unknown) => {
         console.error("Failed to initialize backend:", err);
       });
+    }
   }, [actor]);
 
   return null;
@@ -143,8 +141,21 @@ const certificateRoute = createRoute({
   component: CertificatePage,
 });
 
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin",
+  component: AdminDashboardPage,
+  beforeLoad: () => {
+    const user = getAuthUser();
+    if (!user || user.role !== "admin") {
+      throw redirect({ to: "/login" });
+    }
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  adminRoute,
   mainLayoutRoute.addChildren([
     homeRoute,
     profileRoute,

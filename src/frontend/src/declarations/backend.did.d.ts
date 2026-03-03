@@ -28,6 +28,14 @@ export interface LearningRequest {
   'requesterId' : string,
   'targetUserId' : bigint,
 }
+export interface PracticalVideoSubmission {
+  'status' : string,
+  'workerId' : bigint,
+  'videoDataURI' : string,
+  'submittedAt' : Time,
+  'skill' : string,
+  'workerName' : string,
+}
 export type Time = bigint;
 export interface User {
   'id' : bigint,
@@ -42,30 +50,70 @@ export interface User {
   'videoURL' : string,
   'location' : string,
 }
+export interface UserProfile {
+  'userType' : string,
+  'userId' : bigint,
+  'name' : string,
+}
+export type UserRole = { 'admin' : null } |
+  { 'user' : null } |
+  { 'guest' : null };
 export interface _SERVICE {
+  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'approvePracticalVideo' : ActorMethod<[bigint], boolean>,
+  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'clearAllData' : ActorMethod<[], undefined>,
   'endorseUser' : ActorMethod<[bigint], undefined>,
   'findCitizenByName' : ActorMethod<[string], [] | [Citizen]>,
   'findWorkerByName' : ActorMethod<[string], [] | [User]>,
+  'getAdminStats' : ActorMethod<
+    [],
+    {
+      'totalWorkers' : bigint,
+      'totalCitizens' : bigint,
+      'totalCertified' : bigint,
+      'totalRequests' : bigint,
+    }
+  >,
+  'getAllCitizens' : ActorMethod<[], Array<Citizen>>,
   'getAllLearningRequests' : ActorMethod<[], Array<LearningRequest>>,
   'getAllUsers' : ActorMethod<[], Array<User>>,
+  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCertification' : ActorMethod<[bigint], [] | [CertificationResult]>,
   'getLearningRequestsForWorker' : ActorMethod<
     [bigint],
     Array<LearningRequest>
   >,
+  'getPendingPracticalVideos' : ActorMethod<
+    [],
+    Array<PracticalVideoSubmission>
+  >,
+  'getPracticalVideoStatus' : ActorMethod<[bigint], string>,
   'getUser' : ActorMethod<[bigint], User>,
+  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUsersByDistance' : ActorMethod<[bigint], Array<User>>,
   'getUsersBySkill' : ActorMethod<[string], Array<User>>,
   'getWorkerStats' : ActorMethod<[bigint], User>,
-  'init' : ActorMethod<[], undefined>,
-  'registerCitizen' : ActorMethod<[string, string], bigint>,
+  'getWorkerVideo' : ActorMethod<[bigint], string>,
+  'isCallerAdmin' : ActorMethod<[], boolean>,
+  'loginAdmin' : ActorMethod<[string, string], boolean>,
+  'loginCitizen' : ActorMethod<[string, string], [] | [Citizen]>,
+  'loginWorker' : ActorMethod<[string, string], [] | [User]>,
+  'registerCitizen' : ActorMethod<[string, string, string, string], bigint>,
   'registerWorker' : ActorMethod<
-    [string, string, string, string, string, bigint, string],
+    [string, string, string, string, string, string, string, bigint, string],
     bigint
   >,
+  'rejectPracticalVideo' : ActorMethod<[bigint], boolean>,
+  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'saveWorkerVideo' : ActorMethod<[bigint, string], undefined>,
   'searchUsers' : ActorMethod<[string], Array<User>>,
   'submitLearningRequest' : ActorMethod<[string, bigint, string], undefined>,
+  'submitPracticalVideo' : ActorMethod<
+    [bigint, string, string, string],
+    undefined
+  >,
   'submitTestResult' : ActorMethod<[bigint, bigint, boolean], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;

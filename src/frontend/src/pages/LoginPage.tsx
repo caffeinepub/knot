@@ -15,17 +15,23 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   Briefcase,
+  Eye,
+  EyeOff,
   Loader2,
+  Lock,
   MapPin,
   Phone,
+  Shield,
   Upload,
   User,
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
+import logoImg from "/assets/uploads/image-14-1.png";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { setAuthUser } from "../utils/auth";
+import { sha256Hex } from "../utils/hash";
 import { saveVideoBlob } from "../utils/videoDB";
 
 export function LoginPage() {
@@ -33,7 +39,6 @@ export function LoginPage() {
   const { actor } = useActor();
   const { t } = useLang();
 
-  // Keep a ref to the latest actor so async handlers can access it after retries
   const actorRef = useRef(actor);
   useEffect(() => {
     actorRef.current = actor;
@@ -41,18 +46,34 @@ export function LoginPage() {
 
   // Citizen state
   const [citizenName, setCitizenName] = useState("");
+  const [citizenUsername, setCitizenUsername] = useState("");
+  const [citizenPassword, setCitizenPassword] = useState("");
   const [citizenAddress, setCitizenAddress] = useState("");
   const [citizenLoading, setCitizenLoading] = useState(false);
+  const [citizenPasswordError, setCitizenPasswordError] = useState("");
 
   // Worker state
   const [workerName, setWorkerName] = useState("");
+  const [workerUsername, setWorkerUsername] = useState("");
+  const [workerPassword, setWorkerPassword] = useState("");
   const [workerSkill, setWorkerSkill] = useState("");
   const [workerLocation, setWorkerLocation] = useState("");
   const [workerBio, setWorkerBio] = useState("");
   const [workerContact, setWorkerContact] = useState("");
   const [workerVideoFile, setWorkerVideoFile] = useState<File | null>(null);
-  const [workerDistance, setWorkerDistance] = useState("5");
+  const [workerDistance, _setWorkerDistance] = useState("5");
   const [workerLoading, setWorkerLoading] = useState(false);
+  const [workerPasswordError, setWorkerPasswordError] = useState("");
+
+  // Admin state
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  // Password visibility toggles
+  const [showCitizenPassword, setShowCitizenPassword] = useState(false);
+  const [showWorkerPassword, setShowWorkerPassword] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,54 +83,118 @@ export function LoginPage() {
     setWorkerVideoFile(file);
   }
 
+  async function waitForActor(maxRetries = 10): Promise<typeof actor> {
+    for (let i = 0; i < maxRetries; i++) {
+      if (actorRef.current) return actorRef.current;
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    return actorRef.current;
+  }
+
   async function handleCitizenSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!citizenName.trim() || !citizenAddress.trim()) {
+    setCitizenPasswordError("");
+    if (
+      !citizenName.trim() ||
+      !citizenUsername.trim() ||
+      !citizenPassword.trim() ||
+      !citizenAddress.trim()
+    ) {
       toast.error(t("error_please_fill"));
+      return;
+    }
+    if (citizenPassword.length < 6) {
+      setCitizenPasswordError("Password must be at least 6 characters.");
       return;
     }
     setCitizenLoading(true);
 
     const name = citizenName.trim();
+    const username = citizenUsername.trim().toLowerCase();
     const address = citizenAddress.trim();
+    const passwordHash = await sha256Hex(citizenPassword);
 
-    // First: check if citizen with this name already exists (re-login)
     let userId: bigint | null = null;
     let isReturning = false;
 
-    const maxRetries = 8;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const currentActor = actorRef.current;
-      if (currentActor) {
-        try {
-          // Check for existing citizen first
-          const existing = await currentActor.findCitizenByName(name);
-          if (existing && existing !== null) {
-            userId = existing.id;
-            isReturning = true;
-          } else {
-            // Not found — register fresh
-            userId = await currentActor.registerCitizen(name, address);
+    const currentActor = await waitForActor();
+    if (currentActor) {
+      try {
+        // Try login first (re-login flow)
+        const existing = await currentActor.loginCitizen(
+          username,
+          passwordHash,
+        );
+        if (existing !== null && existing !== undefined) {
+          // Successful re-login
+          userId = existing.id;
+          isReturning = true;
+        } else {
+          // Check if username already exists (wrong password)
+          const byName = await currentActor.findCitizenByName(name);
+          if (byName !== null && byName !== undefined) {
+            // User exists but password wrong
+            setCitizenPasswordError("Incorrect password. Please try again.");
+            setCitizenLoading(false);
+            return;
           }
-          break;
-        } catch (err) {
-          console.warn(`Citizen login attempt ${attempt + 1} failed:`, err);
-          if (attempt < maxRetries - 1) {
-            await new Promise((res) => setTimeout(res, 1000));
-          }
+          // Brand new registration
+          userId = await currentActor.registerCitizen(
+            name,
+            address,
+            username,
+            passwordHash,
+          );
         }
-      } else {
-        await new Promise((res) => setTimeout(res, 1000));
+      } catch (err) {
+        console.warn("Citizen auth failed, using local fallback:", err);
       }
     }
 
-    // Fallback to local ID if backend never responded
+    // Check localStorage for existing citizen account with same username
+    if (!isReturning && !userId) {
+      const localCitizen = localStorage.getItem(
+        `knot_citizen_username_${username}`,
+      );
+      if (localCitizen) {
+        try {
+          const lc = JSON.parse(localCitizen);
+          // Verify password hash matches
+          if (lc.passwordHash === passwordHash) {
+            userId = BigInt(lc.id);
+            isReturning = true;
+          } else {
+            setCitizenPasswordError("Incorrect password. Please try again.");
+            setCitizenLoading(false);
+            return;
+          }
+        } catch {
+          /**/
+        }
+      }
+    }
+
     const finalId = userId ?? BigInt(Date.now() % 1000000);
+
+    // Save to localStorage for admin panel visibility
+    const citizenProfile = { id: finalId.toString(), name, username, address };
+    localStorage.setItem(
+      `knot_citizen_profile_${finalId.toString()}`,
+      JSON.stringify(citizenProfile),
+    );
+    if (!isReturning) {
+      // Save credentials for future re-login
+      localStorage.setItem(
+        `knot_citizen_username_${username}`,
+        JSON.stringify({ id: finalId.toString(), passwordHash }),
+      );
+    }
 
     setAuthUser({
       role: "citizen",
       id: finalId,
       name,
+      username,
       address,
     });
 
@@ -126,13 +211,30 @@ export function LoginPage() {
 
   async function handleWorkerSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!workerName.trim() || !workerSkill || !workerLocation.trim()) {
+    setWorkerPasswordError("");
+    if (
+      !workerName.trim() ||
+      !workerUsername.trim() ||
+      !workerPassword.trim() ||
+      !workerSkill ||
+      !workerLocation.trim() ||
+      !workerContact.trim()
+    ) {
       toast.error(t("error_please_fill_required"));
+      return;
+    }
+    if (!workerContact.trim()) {
+      toast.error("Phone number is required");
+      return;
+    }
+    if (workerPassword.length < 6) {
+      setWorkerPasswordError("Password must be at least 6 characters.");
       return;
     }
     setWorkerLoading(true);
 
     const name = workerName.trim();
+    const username = workerUsername.trim().toLowerCase();
     const skill = workerSkill;
     const location = workerLocation.trim();
     const bio = workerBio.trim();
@@ -141,71 +243,197 @@ export function LoginPage() {
       1,
       Math.min(50, Number.parseInt(workerDistance, 10) || 5),
     );
+    const passwordHash = await sha256Hex(workerPassword);
 
-    // Try to find existing worker first, or register fresh — with retries
     let finalId: bigint | null = null;
     let isReturning = false;
-    const maxRetries = 10;
+    let returnedProfile: {
+      skill?: string;
+      location?: string;
+      bio?: string;
+      contact?: string;
+    } = {};
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const currentActor = actorRef.current;
+    // Check localStorage for existing worker account with same username FIRST
+    const localWorkerCreds = localStorage.getItem(
+      `knot_worker_username_${username}`,
+    );
+    if (localWorkerCreds) {
+      try {
+        const lw = JSON.parse(localWorkerCreds);
+        if (lw.passwordHash === passwordHash) {
+          finalId = BigInt(lw.id);
+          isReturning = true;
+          // Load existing profile
+          const existingProfile = localStorage.getItem(
+            `knot_worker_profile_${lw.id}`,
+          );
+          if (existingProfile) {
+            const ep = JSON.parse(existingProfile);
+            returnedProfile = {
+              skill: ep.skill,
+              location: ep.location,
+              bio: ep.bio,
+              contact: ep.contact,
+            };
+          }
+        } else {
+          setWorkerPasswordError("Incorrect password. Please try again.");
+          setWorkerLoading(false);
+          return;
+        }
+      } catch {
+        /**/
+      }
+    }
+
+    if (!isReturning) {
+      const currentActor = await waitForActor();
       if (currentActor) {
         try {
-          // Check if worker with this name already exists (re-login)
-          const existing = await currentActor.findWorkerByName(name);
-          if (existing && existing !== null) {
-            // Returning worker — reuse their existing ID
+          // Try login first (re-login flow)
+          const existing = await currentActor.loginWorker(
+            username,
+            passwordHash,
+          );
+          if (existing !== null && existing !== undefined) {
             finalId = existing.id;
             isReturning = true;
+            returnedProfile = {
+              skill: existing.skill,
+              location: existing.location,
+              bio: existing.bio,
+              contact: existing.contact,
+            };
           } else {
-            // New worker — register on backend
+            // Check if username already exists on backend (wrong password)
+            const byName = await currentActor.findWorkerByName(name);
+            if (byName !== null && byName !== undefined) {
+              setWorkerPasswordError("Incorrect password. Please try again.");
+              setWorkerLoading(false);
+              return;
+            }
+            // Brand new registration
             finalId = await currentActor.registerWorker(
+              username,
+              passwordHash,
               name,
               skill,
               location,
               bio,
-              "", // Empty string: blob URLs expire on refresh; backend stores "" and frontend uses local IndexedDB
+              "",
               BigInt(distanceValue),
               contact,
             );
           }
-          break; // Success — exit retry loop
         } catch (err) {
-          console.warn(`Worker login attempt ${attempt + 1} failed:`, err);
-          if (attempt < maxRetries - 1) {
-            await new Promise((res) => setTimeout(res, 1000));
-          }
+          console.warn("Worker auth failed, using local fallback:", err);
         }
-      } else {
-        // Actor not ready yet, wait and retry
-        await new Promise((res) => setTimeout(res, 1000));
       }
     }
 
-    // Fallback to local ID if backend never responded
     const userId = finalId ?? BigInt(Date.now() % 1000000);
+    const effectiveSkill =
+      isReturning && returnedProfile.skill ? returnedProfile.skill : skill;
+    const effectiveLocation =
+      isReturning && returnedProfile.location
+        ? returnedProfile.location
+        : location;
+    const effectiveBio =
+      isReturning && returnedProfile.bio !== undefined
+        ? returnedProfile.bio
+        : bio;
+    const effectiveContact =
+      isReturning && returnedProfile.contact
+        ? returnedProfile.contact
+        : contact;
 
-    // Save video blob to IndexedDB under the CONSISTENT id (existing or new)
-    // This ensures the IndexedDB key matches the profile URL (/profile/:id)
+    // Save video locally + upload to backend
     if (workerVideoFile) {
       try {
         await saveVideoBlob(userId.toString(), workerVideoFile);
       } catch (err) {
         console.warn("Failed to save video to IndexedDB:", err);
       }
-      // Also store a same-session preview URL
       const previewUrl = URL.createObjectURL(workerVideoFile);
       localStorage.setItem("knot_worker_video_preview_url", previewUrl);
+
+      try {
+        const base64DataURI = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(workerVideoFile);
+        });
+        localStorage.setItem(
+          `knot_video_b64_${userId.toString()}`,
+          base64DataURI,
+        );
+
+        const uploadToBackend = async () => {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const a = actorRef.current;
+            if (a) {
+              try {
+                await a.saveWorkerVideo(userId, base64DataURI);
+                return;
+              } catch (err) {
+                console.warn(
+                  `Backend video upload attempt ${attempt + 1} failed:`,
+                  err,
+                );
+                if (attempt < 4)
+                  await new Promise((res) => setTimeout(res, 2000));
+              }
+            } else {
+              await new Promise((res) => setTimeout(res, 1500));
+            }
+          }
+        };
+        uploadToBackend();
+      } catch (err) {
+        console.warn("Failed to process video for upload:", err);
+      }
     }
 
-    // Always store the consistent ID — critical for video lookup on profile page
     localStorage.setItem("knot_worker_id", userId.toString());
+
+    // Only overwrite profile on new registration; preserve existing data on re-login
+    if (!isReturning) {
+      const workerProfileData = {
+        id: userId.toString(),
+        name,
+        skill: effectiveSkill,
+        location: effectiveLocation,
+        trustScore: 0,
+        endorsementCount: 0,
+        badgeLevel: "None",
+        distance: distanceValue,
+        bio: effectiveBio,
+        videoURL: "",
+        contact: effectiveContact,
+      };
+      localStorage.setItem(
+        `knot_worker_profile_${userId.toString()}`,
+        JSON.stringify(workerProfileData),
+      );
+      // Save credentials for future re-login
+      localStorage.setItem(
+        `knot_worker_username_${username}`,
+        JSON.stringify({ id: userId.toString(), passwordHash }),
+      );
+    }
+    localStorage.setItem(
+      `knot_worker_name_${name.toLowerCase().trim()}`,
+      userId.toString(),
+    );
 
     setAuthUser({
       role: "worker",
       id: userId,
       name,
-      skill,
+      username,
+      skill: effectiveSkill || skill,
     });
 
     if (isReturning) {
@@ -217,6 +445,58 @@ export function LoginPage() {
     }
     setWorkerLoading(false);
     navigate({ to: "/worker-dashboard" });
+  }
+
+  async function handleAdminSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!adminUsername.trim() || !adminPassword.trim()) {
+      toast.error("Please enter username and password.");
+      return;
+    }
+    setAdminLoading(true);
+
+    const username = adminUsername.trim();
+    const password = adminPassword;
+
+    // Primary: local credential check (admin / knot@admin2026)
+    if (username === "admin" && password === "knot@admin2026") {
+      setAuthUser({
+        role: "admin",
+        id: BigInt(0),
+        name: "Administrator",
+        username,
+      });
+      toast.success("Welcome, Administrator!");
+      setAdminLoading(false);
+      navigate({ to: "/admin" });
+      return;
+    }
+
+    // Fallback: try backend check as well
+    const passwordHash = await sha256Hex(password);
+    const currentActor = await waitForActor();
+    if (currentActor) {
+      try {
+        const isAdmin = await currentActor.loginAdmin(username, passwordHash);
+        if (isAdmin) {
+          setAuthUser({
+            role: "admin",
+            id: BigInt(0),
+            name: "Administrator",
+            username,
+          });
+          toast.success("Welcome, Administrator!");
+          setAdminLoading(false);
+          navigate({ to: "/admin" });
+          return;
+        }
+      } catch (err) {
+        console.warn("Admin backend login error:", err);
+      }
+    }
+
+    toast.error("Invalid admin credentials.");
+    setAdminLoading(false);
   }
 
   return (
@@ -231,8 +511,6 @@ export function LoginPage() {
                             radial-gradient(circle at 50% 50%, oklch(0.7 0.16 65 / 0.2) 0%, transparent 70%)`,
         }}
       />
-
-      {/* Decorative pattern */}
       <div
         className="absolute inset-0 opacity-5"
         style={{
@@ -243,13 +521,26 @@ export function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md px-4 py-8 animate-slide-up">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden ring-4 ring-amber-400/50 shadow-2xl mb-4">
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-20 h-20 rounded-2xl overflow-hidden ring-4 ring-amber-400/50 shadow-2xl mb-4 relative">
             <img
-              src="/assets/uploads/WhatsApp-Image-2026-02-27-at-10.42.55-1.jpeg"
+              src={logoImg}
               alt="KNOT Logo"
               className="w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.style.display = "none";
+                const fallback =
+                  target.nextElementSibling as HTMLElement | null;
+                if (fallback) fallback.style.display = "flex";
+              }}
             />
+            <div
+              className="w-full h-full bg-amber-500 items-center justify-center text-white font-extrabold text-3xl font-display absolute inset-0"
+              style={{ display: "none" }}
+            >
+              K
+            </div>
           </div>
           <h1 className="font-display font-extrabold text-3xl text-amber-900 tracking-tight">
             KNOT
@@ -257,6 +548,13 @@ export function LoginPage() {
           <p className="text-amber-700/70 text-sm font-body mt-1">
             Skills • Trust • Community
           </p>
+          {/* Security badge */}
+          <div className="flex items-center gap-1.5 mt-2 px-3 py-1 bg-green-100 border border-green-300 rounded-full">
+            <Lock className="w-3 h-3 text-green-600" />
+            <span className="text-green-700 text-xs font-body font-semibold">
+              Secure Authentication
+            </span>
+          </div>
         </div>
 
         {/* Login Card */}
@@ -271,9 +569,10 @@ export function LoginPage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="citizen" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6 bg-amber-50 p-1 rounded-xl">
+              <TabsList className="grid w-full grid-cols-3 mb-6 bg-amber-50 p-1 rounded-xl">
                 <TabsTrigger
                   value="citizen"
+                  data-ocid="login.citizen.tab"
                   className="rounded-lg font-body font-semibold text-sm data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
                 >
                   <User className="w-4 h-4 mr-1.5" />
@@ -281,10 +580,19 @@ export function LoginPage() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="worker"
+                  data-ocid="login.worker.tab"
                   className="rounded-lg font-body font-semibold text-sm data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
                 >
                   <Briefcase className="w-4 h-4 mr-1.5" />
                   {t("login_im_worker")}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="admin"
+                  data-ocid="login.admin.tab"
+                  className="rounded-lg font-body font-semibold text-sm data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                >
+                  <Shield className="w-4 h-4 mr-1.5" />
+                  Admin
                 </TabsTrigger>
               </TabsList>
 
@@ -300,6 +608,7 @@ export function LoginPage() {
                     </Label>
                     <Input
                       id="citizen-name"
+                      data-ocid="citizen.name.input"
                       type="text"
                       placeholder={t("login_enter_name")}
                       value={citizenName}
@@ -307,6 +616,74 @@ export function LoginPage() {
                       className="font-body border-border h-11"
                       required
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="citizen-username"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      Username
+                    </Label>
+                    <Input
+                      id="citizen-username"
+                      data-ocid="citizen.username.input"
+                      type="text"
+                      placeholder="Choose a username (e.g. john_doe)"
+                      value={citizenUsername}
+                      onChange={(e) => setCitizenUsername(e.target.value)}
+                      className="font-body border-border h-11"
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="citizen-password"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      <Lock className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="citizen-password"
+                        data-ocid="citizen.password.input"
+                        type={showCitizenPassword ? "text" : "password"}
+                        placeholder="Min 6 characters"
+                        value={citizenPassword}
+                        onChange={(e) => {
+                          setCitizenPassword(e.target.value);
+                          setCitizenPasswordError("");
+                        }}
+                        className="font-body border-border h-11 pr-10"
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCitizenPassword((p) => !p)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label={
+                          showCitizenPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                      >
+                        {showCitizenPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    {citizenPasswordError && (
+                      <p
+                        data-ocid="citizen.password.error_state"
+                        className="text-red-600 text-xs font-body mt-1"
+                      >
+                        {citizenPasswordError}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label
@@ -318,6 +695,7 @@ export function LoginPage() {
                     </Label>
                     <Input
                       id="citizen-address"
+                      data-ocid="citizen.address.input"
                       type="text"
                       placeholder={t("login_enter_city")}
                       value={citizenAddress}
@@ -329,12 +707,14 @@ export function LoginPage() {
 
                   <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60">
                     <p className="text-amber-800 text-xs font-body">
-                      🔍 {t("login_citizen_hint")}
+                      🔒 Your credentials are securely hashed. Use the same
+                      username &amp; password to log back in.
                     </p>
                   </div>
 
                   <Button
                     type="submit"
+                    data-ocid="citizen.submit_button"
                     className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
                     disabled={citizenLoading}
                   >
@@ -362,6 +742,7 @@ export function LoginPage() {
                     </Label>
                     <Input
                       id="worker-name"
+                      data-ocid="worker.name.input"
                       type="text"
                       placeholder={t("login_enter_name")}
                       value={workerName}
@@ -373,6 +754,74 @@ export function LoginPage() {
 
                   <div className="space-y-1.5">
                     <Label
+                      htmlFor="worker-username"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      Username
+                    </Label>
+                    <Input
+                      id="worker-username"
+                      data-ocid="worker.username.input"
+                      type="text"
+                      placeholder="Choose a unique username"
+                      value={workerUsername}
+                      onChange={(e) => setWorkerUsername(e.target.value)}
+                      className="font-body border-border h-11"
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="worker-password"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      <Lock className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="worker-password"
+                        data-ocid="worker.password.input"
+                        type={showWorkerPassword ? "text" : "password"}
+                        placeholder="Min 6 characters"
+                        value={workerPassword}
+                        onChange={(e) => {
+                          setWorkerPassword(e.target.value);
+                          setWorkerPasswordError("");
+                        }}
+                        className="font-body border-border h-11 pr-10"
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowWorkerPassword((p) => !p)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label={
+                          showWorkerPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showWorkerPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    {workerPasswordError && (
+                      <p
+                        data-ocid="worker.password.error_state"
+                        className="text-red-600 text-xs font-body mt-1"
+                      >
+                        {workerPasswordError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
                       htmlFor="worker-skill"
                       className="font-body text-sm font-medium text-foreground"
                     >
@@ -380,6 +829,7 @@ export function LoginPage() {
                     </Label>
                     <Input
                       id="worker-skill"
+                      data-ocid="worker.skill.input"
                       type="text"
                       placeholder={t("login_select_skill")}
                       value={workerSkill}
@@ -399,32 +849,13 @@ export function LoginPage() {
                     </Label>
                     <Input
                       id="worker-location"
+                      data-ocid="worker.location.input"
                       type="text"
                       placeholder={t("login_enter_city")}
                       value={workerLocation}
                       onChange={(e) => setWorkerLocation(e.target.value)}
                       className="font-body border-border h-11"
                       required
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-distance"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      <MapPin className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      Distance from city center (km)
-                    </Label>
-                    <Input
-                      id="worker-distance"
-                      type="number"
-                      min={1}
-                      max={50}
-                      placeholder="5"
-                      value={workerDistance}
-                      onChange={(e) => setWorkerDistance(e.target.value)}
-                      className="font-body border-border h-11"
                     />
                   </div>
 
@@ -440,6 +871,7 @@ export function LoginPage() {
                     </Label>
                     <Textarea
                       id="worker-bio"
+                      data-ocid="worker.bio.textarea"
                       placeholder={t("login_bio_placeholder")}
                       value={workerBio}
                       onChange={(e) => setWorkerBio(e.target.value)}
@@ -448,25 +880,23 @@ export function LoginPage() {
                     />
                   </div>
 
-                  {/* Contact Number */}
                   <div className="space-y-1.5">
                     <Label
                       htmlFor="worker-contact"
                       className="font-body text-sm font-medium text-foreground"
                     >
                       <Phone className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      Contact Number{" "}
-                      <span className="text-muted-foreground font-normal">
-                        ({t("login_optional")})
-                      </span>
+                      Contact Number
                     </Label>
                     <Input
                       id="worker-contact"
+                      data-ocid="worker.contact.input"
                       type="tel"
                       placeholder="e.g. +91 98765 43210"
                       value={workerContact}
                       onChange={(e) => setWorkerContact(e.target.value)}
                       className="font-body border-border h-11"
+                      required
                     />
                   </div>
 
@@ -500,9 +930,7 @@ export function LoginPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            setWorkerVideoFile(null);
-                          }}
+                          onClick={() => setWorkerVideoFile(null)}
                           className="text-green-600 hover:text-green-800 text-xs font-body underline"
                         >
                           {t("login_remove")}
@@ -511,6 +939,7 @@ export function LoginPage() {
                     ) : (
                       <button
                         type="button"
+                        data-ocid="worker.video.upload_button"
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full h-20 border-2 border-dashed border-amber-300 rounded-lg flex flex-col items-center justify-center gap-1.5 text-amber-600 hover:border-amber-500 hover:bg-amber-50 transition-all group"
                       >
@@ -525,8 +954,16 @@ export function LoginPage() {
                     )}
                   </div>
 
+                  <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60">
+                    <p className="text-amber-800 text-xs font-body">
+                      🔒 Your credentials are securely hashed. Use the same
+                      username &amp; password to log back in.
+                    </p>
+                  </div>
+
                   <Button
                     type="submit"
+                    data-ocid="worker.submit_button"
                     className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
                     disabled={workerLoading}
                   >
@@ -541,20 +978,100 @@ export function LoginPage() {
                   </Button>
                 </form>
               </TabsContent>
+
+              {/* Admin Tab */}
+              <TabsContent value="admin" className="mt-0">
+                <form onSubmit={handleAdminSubmit} className="space-y-4">
+                  <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <Shield className="w-4 h-4 text-slate-600 shrink-0" />
+                    <p className="text-slate-700 text-xs font-body">
+                      Admin access only. Restricted to authorized personnel.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="admin-username"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      Admin Username
+                    </Label>
+                    <Input
+                      id="admin-username"
+                      data-ocid="admin.username.input"
+                      type="text"
+                      placeholder="Enter admin username"
+                      value={adminUsername}
+                      onChange={(e) => setAdminUsername(e.target.value)}
+                      className="font-body border-border h-11"
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="admin-password"
+                      className="font-body text-sm font-medium text-foreground"
+                    >
+                      <Lock className="w-3.5 h-3.5 inline mr-1 text-slate-600" />
+                      Admin Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="admin-password"
+                        data-ocid="admin.password.input"
+                        type={showAdminPassword ? "text" : "password"}
+                        placeholder="Enter admin password"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        className="font-body border-border h-11 pr-10"
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword((p) => !p)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label={
+                          showAdminPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showAdminPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    data-ocid="admin.submit_button"
+                    className="w-full h-11 bg-slate-700 hover:bg-slate-800 text-white font-body font-semibold shadow-lg transition-all"
+                    disabled={adminLoading}
+                  >
+                    {adminLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Authenticating...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-4 h-4 mr-2" />
+                        Access Admin Panel
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
 
         <p className="text-center text-amber-700/50 text-xs font-body mt-5">
-          © {new Date().getFullYear()} KNOT · Built with love using{" "}
-          <a
-            href="https://caffeine.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-amber-700"
-          >
-            caffeine.ai
-          </a>
+          © {new Date().getFullYear()} KNOT · Skills • Trust • Community
         </p>
       </div>
     </main>

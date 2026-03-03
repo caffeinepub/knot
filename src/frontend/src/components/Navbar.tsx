@@ -18,12 +18,14 @@ import {
   LogIn,
   LogOut,
   Menu,
+  Shield,
   ThumbsUp,
   Users,
   X,
 } from "lucide-react";
 // Note: Users is still used in notification icons
 import { useState } from "react";
+import logoImg from "/assets/uploads/image-14-1.png";
 import { useLang } from "../contexts/LanguageContext";
 import { useNotifications } from "../contexts/NotificationsContext";
 import type { NotificationType } from "../contexts/NotificationsContext";
@@ -81,12 +83,25 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo + Brand */}
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 ring-2 ring-white/20 group-hover:ring-white/40 transition-all">
+            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 ring-2 ring-white/20 group-hover:ring-white/40 transition-all relative">
               <img
-                src="/assets/uploads/WhatsApp-Image-2026-02-27-at-10.42.55-1.jpeg"
+                src={logoImg}
                 alt="KNOT Logo"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.style.display = "none";
+                  const fallback =
+                    target.nextElementSibling as HTMLElement | null;
+                  if (fallback) fallback.style.display = "flex";
+                }}
               />
+              <div
+                className="w-full h-full bg-amber-500 items-center justify-center text-white font-extrabold text-lg font-display absolute inset-0"
+                style={{ display: "none" }}
+              >
+                K
+              </div>
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-display font-extrabold text-xl text-white tracking-tight">
@@ -263,6 +278,22 @@ export function Navbar() {
             {/* Auth section */}
             {authUser ? (
               <div className="flex items-center gap-2 ml-2 pl-2 border-l border-white/20">
+                {/* Admin Panel link */}
+                {authUser.role === "admin" && (
+                  <Link to="/admin">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      data-ocid="admin.panel.link"
+                      className={`text-amber-300 hover:text-amber-200 hover:bg-white/10 gap-2 font-body font-semibold ${
+                        isActive("/admin") ? "bg-white/15 text-amber-200" : ""
+                      }`}
+                    >
+                      <Shield className="w-4 h-4" />
+                      Admin Panel
+                    </Button>
+                  </Link>
+                )}
                 {/* Worker dashboard link */}
                 {authUser.role === "worker" && (
                   <Link to="/worker-dashboard">
@@ -303,12 +334,16 @@ export function Navbar() {
                     className={`text-[10px] px-1.5 py-0 h-4 font-body font-semibold ${
                       authUser.role === "worker"
                         ? "bg-amber-500 text-white border-0"
-                        : "bg-blue-500 text-white border-0"
+                        : authUser.role === "admin"
+                          ? "bg-red-600 text-white border-0"
+                          : "bg-blue-500 text-white border-0"
                     }`}
                   >
                     {authUser.role === "worker"
                       ? t("nav_worker")
-                      : t("nav_citizen")}
+                      : authUser.role === "admin"
+                        ? "Admin"
+                        : t("nav_citizen")}
                   </Badge>
                 </div>
                 <Button
@@ -453,6 +488,17 @@ export function Navbar() {
               {/* Auth in mobile */}
               {authUser ? (
                 <>
+                  {authUser.role === "admin" && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setMobileOpen(false)}
+                      data-ocid="admin.panel.mobile.link"
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-amber-300 hover:text-amber-200 hover:bg-white/10 transition-colors font-body font-semibold"
+                    >
+                      <Shield className="w-4 h-4" />
+                      Admin Panel
+                    </Link>
+                  )}
                   {authUser.role === "worker" && (
                     <Link
                       to="/worker-dashboard"
@@ -483,12 +529,16 @@ export function Navbar() {
                           className={`text-[10px] font-body font-semibold px-2 py-0.5 rounded-full ${
                             authUser.role === "worker"
                               ? "bg-amber-500 text-white"
-                              : "bg-blue-500 text-white"
+                              : authUser.role === "admin"
+                                ? "bg-red-600 text-white"
+                                : "bg-blue-500 text-white"
                           }`}
                         >
                           {authUser.role === "worker"
                             ? t("nav_worker")
-                            : t("nav_citizen")}
+                            : authUser.role === "admin"
+                              ? "Admin"
+                              : t("nav_citizen")}
                         </span>
                       </div>
                       <button

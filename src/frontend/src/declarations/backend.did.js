@@ -8,6 +8,11 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const UserRole = IDL.Variant({
+  'admin' : IDL.Null,
+  'user' : IDL.Null,
+  'guest' : IDL.Null,
+});
 export const Citizen = IDL.Record({
   'id' : IDL.Nat,
   'name' : IDL.Text,
@@ -34,6 +39,11 @@ export const LearningRequest = IDL.Record({
   'requesterId' : IDL.Text,
   'targetUserId' : IDL.Nat,
 });
+export const UserProfile = IDL.Record({
+  'userType' : IDL.Text,
+  'userId' : IDL.Nat,
+  'name' : IDL.Text,
+});
 export const CertificationResult = IDL.Record({
   'workerId' : IDL.Nat,
   'level' : IDL.Text,
@@ -44,18 +54,44 @@ export const CertificationResult = IDL.Record({
   'practicalPassed' : IDL.Bool,
   'passed' : IDL.Bool,
 });
+export const PracticalVideoSubmission = IDL.Record({
+  'status' : IDL.Text,
+  'workerId' : IDL.Nat,
+  'videoDataURI' : IDL.Text,
+  'submittedAt' : Time,
+  'skill' : IDL.Text,
+  'workerName' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
+  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'approvePracticalVideo' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'clearAllData' : IDL.Func([], [], []),
   'endorseUser' : IDL.Func([IDL.Nat], [], []),
   'findCitizenByName' : IDL.Func([IDL.Text], [IDL.Opt(Citizen)], ['query']),
   'findWorkerByName' : IDL.Func([IDL.Text], [IDL.Opt(User)], ['query']),
+  'getAdminStats' : IDL.Func(
+      [],
+      [
+        IDL.Record({
+          'totalWorkers' : IDL.Nat,
+          'totalCitizens' : IDL.Nat,
+          'totalCertified' : IDL.Nat,
+          'totalRequests' : IDL.Nat,
+        }),
+      ],
+      ['query'],
+    ),
+  'getAllCitizens' : IDL.Func([], [IDL.Vec(Citizen)], ['query']),
   'getAllLearningRequests' : IDL.Func(
       [],
       [IDL.Vec(LearningRequest)],
       ['query'],
     ),
   'getAllUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
+  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+  'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCertification' : IDL.Func(
       [IDL.Nat],
       [IDL.Opt(CertificationResult)],
@@ -66,25 +102,71 @@ export const idlService = IDL.Service({
       [IDL.Vec(LearningRequest)],
       ['query'],
     ),
+  'getPendingPracticalVideos' : IDL.Func(
+      [],
+      [IDL.Vec(PracticalVideoSubmission)],
+      ['query'],
+    ),
+  'getPracticalVideoStatus' : IDL.Func([IDL.Nat], [IDL.Text], ['query']),
   'getUser' : IDL.Func([IDL.Nat], [User], ['query']),
+  'getUserProfile' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Opt(UserProfile)],
+      ['query'],
+    ),
   'getUsersByDistance' : IDL.Func([IDL.Nat], [IDL.Vec(User)], ['query']),
   'getUsersBySkill' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
   'getWorkerStats' : IDL.Func([IDL.Nat], [User], ['query']),
-  'init' : IDL.Func([], [], []),
-  'registerCitizen' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
-  'registerWorker' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
+  'getWorkerVideo' : IDL.Func([IDL.Nat], [IDL.Text], ['query']),
+  'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'loginAdmin' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
+  'loginCitizen' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(Citizen)],
+      ['query'],
+    ),
+  'loginWorker' : IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(User)], ['query']),
+  'registerCitizen' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Nat],
       [],
     ),
+  'registerWorker' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Nat,
+        IDL.Text,
+      ],
+      [IDL.Nat],
+      [],
+    ),
+  'rejectPracticalVideo' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'saveWorkerVideo' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'searchUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
   'submitLearningRequest' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
+  'submitPracticalVideo' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'submitTestResult' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Bool], [IDL.Bool], []),
 });
 
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const UserRole = IDL.Variant({
+    'admin' : IDL.Null,
+    'user' : IDL.Null,
+    'guest' : IDL.Null,
+  });
   const Citizen = IDL.Record({
     'id' : IDL.Nat,
     'name' : IDL.Text,
@@ -111,6 +193,11 @@ export const idlFactory = ({ IDL }) => {
     'requesterId' : IDL.Text,
     'targetUserId' : IDL.Nat,
   });
+  const UserProfile = IDL.Record({
+    'userType' : IDL.Text,
+    'userId' : IDL.Nat,
+    'name' : IDL.Text,
+  });
   const CertificationResult = IDL.Record({
     'workerId' : IDL.Nat,
     'level' : IDL.Text,
@@ -121,18 +208,44 @@ export const idlFactory = ({ IDL }) => {
     'practicalPassed' : IDL.Bool,
     'passed' : IDL.Bool,
   });
+  const PracticalVideoSubmission = IDL.Record({
+    'status' : IDL.Text,
+    'workerId' : IDL.Nat,
+    'videoDataURI' : IDL.Text,
+    'submittedAt' : Time,
+    'skill' : IDL.Text,
+    'workerName' : IDL.Text,
+  });
   
   return IDL.Service({
+    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'approvePracticalVideo' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'clearAllData' : IDL.Func([], [], []),
     'endorseUser' : IDL.Func([IDL.Nat], [], []),
     'findCitizenByName' : IDL.Func([IDL.Text], [IDL.Opt(Citizen)], ['query']),
     'findWorkerByName' : IDL.Func([IDL.Text], [IDL.Opt(User)], ['query']),
+    'getAdminStats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'totalWorkers' : IDL.Nat,
+            'totalCitizens' : IDL.Nat,
+            'totalCertified' : IDL.Nat,
+            'totalRequests' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
+    'getAllCitizens' : IDL.Func([], [IDL.Vec(Citizen)], ['query']),
     'getAllLearningRequests' : IDL.Func(
         [],
         [IDL.Vec(LearningRequest)],
         ['query'],
       ),
     'getAllUsers' : IDL.Func([], [IDL.Vec(User)], ['query']),
+    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+    'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCertification' : IDL.Func(
         [IDL.Nat],
         [IDL.Opt(CertificationResult)],
@@ -143,19 +256,60 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(LearningRequest)],
         ['query'],
       ),
+    'getPendingPracticalVideos' : IDL.Func(
+        [],
+        [IDL.Vec(PracticalVideoSubmission)],
+        ['query'],
+      ),
+    'getPracticalVideoStatus' : IDL.Func([IDL.Nat], [IDL.Text], ['query']),
     'getUser' : IDL.Func([IDL.Nat], [User], ['query']),
+    'getUserProfile' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
     'getUsersByDistance' : IDL.Func([IDL.Nat], [IDL.Vec(User)], ['query']),
     'getUsersBySkill' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
     'getWorkerStats' : IDL.Func([IDL.Nat], [User], ['query']),
-    'init' : IDL.Func([], [], []),
-    'registerCitizen' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
-    'registerWorker' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
+    'getWorkerVideo' : IDL.Func([IDL.Nat], [IDL.Text], ['query']),
+    'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'loginAdmin' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
+    'loginCitizen' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(Citizen)],
+        ['query'],
+      ),
+    'loginWorker' : IDL.Func([IDL.Text, IDL.Text], [IDL.Opt(User)], ['query']),
+    'registerCitizen' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Nat],
         [],
       ),
+    'registerWorker' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat,
+          IDL.Text,
+        ],
+        [IDL.Nat],
+        [],
+      ),
+    'rejectPracticalVideo' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'saveWorkerVideo' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'searchUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
     'submitLearningRequest' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
+    'submitPracticalVideo' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'submitTestResult' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Bool], [IDL.Bool], []),
   });
 };

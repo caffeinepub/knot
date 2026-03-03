@@ -94,51 +94,151 @@ export function WorkerDashboardPage() {
     staleTime: 1000 * 30,
   });
 
+  // Check localStorage for cert status (pending_review / failed / none)
+  const workerIdStr = workerId?.toString();
+  const certStatusLS = workerIdStr
+    ? localStorage.getItem(`knot_cert_status_${workerIdStr}`)
+    : null;
+  const certMcqLS = workerIdStr
+    ? localStorage.getItem(`knot_cert_mcq_${workerIdStr}`)
+    : null;
+
   const { data: certification } = useQuery<CertificationResult | null>({
-    queryKey: ["certification", workerId?.toString()],
+    queryKey: ["certification", workerIdStr],
     queryFn: async () => {
-      if (!actor || workerId === undefined) return null;
-      return actor.getCertification(workerId);
+      // Check if admin approved via localStorage flag
+      if (workerIdStr) {
+        const approved = localStorage.getItem(
+          `knot_cert_approved_${workerIdStr}`,
+        );
+        if (approved === "true") {
+          localStorage.setItem("knot_cert_passed", "true");
+        }
+      }
+
+      // First try backend
+      if (actor && workerId !== undefined) {
+        try {
+          const backendCert = await actor.getCertification(workerId);
+          if (backendCert) {
+            // If backend says passed, sync to localStorage
+            if (backendCert.passed && workerIdStr) {
+              localStorage.setItem("knot_cert_passed", "true");
+              localStorage.setItem(
+                `knot_cert_status_${workerIdStr}`,
+                "approved",
+              );
+            }
+            return backendCert;
+          }
+        } catch {
+          // fall through to localStorage
+        }
+
+        // Also check practical video status from backend
+        try {
+          const pvStatus = await actor.getPracticalVideoStatus(workerId);
+          if (pvStatus === "approved" && workerIdStr) {
+            localStorage.setItem("knot_cert_passed", "true");
+            localStorage.setItem(`knot_cert_approved_${workerIdStr}`, "true");
+            localStorage.setItem(`knot_cert_status_${workerIdStr}`, "approved");
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Fallback: read from localStorage (set by CertificationTestPage on submit)
+      const localKey = `knot_cert_${workerIdStr}`;
+      const raw = localStorage.getItem(localKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          return {
+            workerId: BigInt(parsed.workerId ?? workerId ?? 0),
+            skill: parsed.skill ?? "",
+            level: parsed.level ?? "Basic",
+            passed: !!parsed.passed,
+            issuedDate: BigInt(parsed.issuedDate ?? 0),
+            certificateId: parsed.certificateId ?? "",
+            mcqScore: BigInt(parsed.mcqScore ?? 0),
+            practicalPassed: !!parsed.practicalPassed,
+          } as CertificationResult;
+        } catch {
+          return null;
+        }
+      }
+      return null;
     },
-    enabled: !!actor && !isFetching && workerId !== undefined,
-    staleTime: 1000 * 60,
+    enabled: workerId !== undefined,
+    staleTime: 1000 * 30,
+    retry: 2,
+    retryDelay: 2000,
   });
 
   const [videoURL, setVideoURL] = useState<string>("");
 
-  // Load video: first try IndexedDB (persisted), then session blob URL
+  // Load video: try backend first (cross-device), then IndexedDB, then session blob
   useEffect(() => {
-    const workerId =
+    const workerIdStr =
       localStorage.getItem("knot_worker_id") ?? authUser?.id?.toString();
-    if (!workerId) {
-      // Fall back to session blob URL
+    if (!workerIdStr) {
       const sessionUrl =
         localStorage.getItem("knot_worker_video_preview_url") ?? "";
       setVideoURL(sessionUrl);
       return;
     }
+
     let objectUrl: string | null = null;
-    getVideoObjectURL(workerId)
-      .then((url) => {
+
+    const loadVideo = async () => {
+      // 1. Try backend (works cross-device)
+      if (actor && workerId !== undefined) {
+        try {
+          const backendDataURI = await actor.getWorkerVideo(workerId);
+          if (backendDataURI && backendDataURI.length > 10) {
+            setVideoURL(backendDataURI);
+            return;
+          }
+        } catch (err) {
+          console.warn(
+            "Backend video fetch failed, falling back to local:",
+            err,
+          );
+        }
+      }
+
+      // 2. Try IndexedDB (same device, persisted)
+      try {
+        const url = await getVideoObjectURL(workerIdStr);
         if (url) {
           objectUrl = url;
           setVideoURL(url);
-        } else {
-          // Fall back to session blob URL
-          const sessionUrl =
-            localStorage.getItem("knot_worker_video_preview_url") ?? "";
-          setVideoURL(sessionUrl);
+          return;
         }
-      })
-      .catch(() => {
-        const sessionUrl =
-          localStorage.getItem("knot_worker_video_preview_url") ?? "";
-        setVideoURL(sessionUrl);
-      });
+      } catch {
+        // fall through
+      }
+
+      // 3. Fall back to base64 localStorage copy
+      const b64 = localStorage.getItem(`knot_video_b64_${workerIdStr}`);
+      if (b64) {
+        setVideoURL(b64);
+        return;
+      }
+
+      // 4. Last resort: session blob URL
+      const sessionUrl =
+        localStorage.getItem("knot_worker_video_preview_url") ?? "";
+      setVideoURL(sessionUrl);
+    };
+
+    loadVideo();
+
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [authUser?.id]);
+  }, [authUser?.id, actor, workerId]);
 
   if (!authUser || authUser.role !== "worker") {
     return null;
@@ -209,8 +309,10 @@ export function WorkerDashboardPage() {
             {t("cert_section_title")}
           </h2>
 
-          {certification?.passed ? (
-            /* PASSED state */
+          {certification?.passed ||
+          localStorage.getItem(`knot_cert_approved_${workerIdStr}`) ===
+            "true" ? (
+            /* PASSED / APPROVED state */
             <Card className="border-2 border-green-300 bg-green-50/50 shadow-sm">
               <CardContent className="py-5">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -227,10 +329,10 @@ export function WorkerDashboardPage() {
                       </span>
                     </div>
                     <p className="font-body text-sm text-green-700">
-                      {certification.skill} · MCQ:{" "}
-                      {Number(certification.mcqScore)}/9
+                      {certification?.skill ?? authUser.skill} · MCQ:{" "}
+                      {Number(certification?.mcqScore ?? certMcqLS ?? 0)}/9
                     </p>
-                    {certification.certificateId && (
+                    {certification?.certificateId && (
                       <p className="font-body text-xs text-green-600/70 mt-0.5 truncate">
                         ID: {certification.certificateId}
                       </p>
@@ -248,7 +350,39 @@ export function WorkerDashboardPage() {
                 </div>
               </CardContent>
             </Card>
-          ) : certification && !certification.passed ? (
+          ) : certStatusLS === "pending_review" ? (
+            /* AWAITING ADMIN REVIEW state */
+            <Card className="border-2 border-blue-300 bg-blue-50/50 shadow-sm">
+              <CardContent className="py-5">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                    <Clock className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <p className="font-display font-bold text-base text-blue-800">
+                        Awaiting Admin Review
+                      </p>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-200 text-blue-800 text-xs font-body font-semibold">
+                        ⏳ Pending
+                      </span>
+                    </div>
+                    <p className="font-body text-sm text-blue-700">
+                      Your practical video has been submitted. Admin will review
+                      and approve or reject.
+                    </p>
+                    {certMcqLS && (
+                      <p className="font-body text-xs text-blue-600 mt-0.5">
+                        MCQ Score: {certMcqLS}/9
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : certification &&
+            !certification.passed &&
+            certStatusLS !== "pending_review" ? (
             /* FAILED state */
             <Card className="border-2 border-orange-300 bg-orange-50/50 shadow-sm">
               <CardContent className="py-5">

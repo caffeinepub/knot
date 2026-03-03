@@ -1,7 +1,8 @@
 export interface AuthUser {
-  role: "citizen" | "worker";
+  role: "citizen" | "worker" | "admin";
   id: bigint;
   name: string;
+  username: string;
   address?: string;
   skill?: string;
 }
@@ -13,15 +14,17 @@ export function getAuthUser(): AuthUser | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
-      role: "citizen" | "worker";
+      role: "citizen" | "worker" | "admin";
       id: string;
       name: string;
+      username?: string;
       address?: string;
       skill?: string;
     };
     return {
       ...parsed,
       id: BigInt(parsed.id),
+      username: parsed.username ?? parsed.name ?? "",
     };
   } catch {
     return null;

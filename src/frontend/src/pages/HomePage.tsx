@@ -8,8 +8,9 @@ import {
 } from "@/components/ui/select";
 import { Link } from "@tanstack/react-router";
 import { Award, MapPin, RefreshCw, TrendingUp, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { CardSkeletonGrid } from "../components/CardSkeleton";
+import { BannerAd, PopupAd } from "../components/PopupAd";
 import { UserCard } from "../components/UserCard";
 import { VoiceSearch } from "../components/VoiceSearch";
 import { useLang } from "../contexts/LanguageContext";
@@ -364,9 +365,24 @@ export function HomePage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredUsers.map((user, index) => (
-                <UserCard key={user.id.toString()} user={user} index={index} />
+                <React.Fragment key={user.id.toString()}>
+                  <UserCard user={user} index={index} />
+                  {/* Insert banner ad after every 3rd card */}
+                  {(index + 1) % 3 === 0 && (
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <BannerAd />
+                    </div>
+                  )}
+                </React.Fragment>
               ))}
             </div>
+            {/* Show at least one banner ad even with few results */}
+            {filteredUsers.length > 0 && filteredUsers.length < 3 && (
+              <div className="mt-5">
+                <BannerAd />
+              </div>
+            )}
+            <PopupAd />
           </>
         )}
       </div>

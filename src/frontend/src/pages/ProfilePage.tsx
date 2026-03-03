@@ -24,14 +24,15 @@ import {
   Phone,
   Play,
   Share2,
+  Shield,
   Star,
   ThumbsUp,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CertificationResult } from "../backend.d.ts";
 import { useLang } from "../contexts/LanguageContext";
-import { useNotifications } from "../contexts/NotificationsContext";
+import { addNotificationForUser } from "../contexts/NotificationsContext";
 import { useActor } from "../hooks/useActor";
 import {
   useEndorseUser,
@@ -45,64 +46,102 @@ import {
   getSkillThumbClass,
   getTranslatedSkillName,
 } from "../utils/helpers";
-import { getVideoObjectURL } from "../utils/videoDB";
+import { getVideoObjectURLWithFallback } from "../utils/videoDB";
 
 export function ProfilePage() {
   const { id } = useParams({ from: "/main/profile/$id" });
   const userId = id ? BigInt(id) : undefined;
   const { t } = useLang();
   const authUser = getAuthUser();
+  const authUserRef = useRef(authUser);
+  authUserRef.current = authUser;
   const isCitizen = authUser?.role === "citizen";
-  const { addNotification } = useNotifications();
   const navigate = useNavigate();
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
 
   const { data: user, isLoading, isError, refetch } = useUser(userId);
   const endorseMutation = useEndorseUser();
   const submitRequestMutation = useSubmitLearningRequest();
 
   const [learnModalOpen, setLearnModalOpen] = useState(false);
-  const [requesterName, setRequesterName] = useState("");
+  const [requesterName, setRequesterName] = useState(authUser?.name ?? "");
   const [learnMessage, setLearnMessage] = useState("");
   const [endorsed, setEndorsed] = useState(false);
   const [videoObjectUrl, setVideoObjectUrl] = useState<string | null>(null);
 
-  // Load video from IndexedDB when user data is available
+  // Load video: try backend first (cross-device), then local IndexedDB/localStorage
   useEffect(() => {
     if (!userId) return;
     let objectUrl: string | null = null;
-    getVideoObjectURL(userId.toString())
-      .then((url) => {
-        if (url) {
+    let cancelled = false;
+
+    const loadVideo = async () => {
+      // 1. Try backend (works on any device)
+      if (actor) {
+        try {
+          const backendDataURI = await actor.getWorkerVideo(userId);
+          if (!cancelled && backendDataURI && backendDataURI.length > 10) {
+            setVideoObjectUrl(backendDataURI);
+            return;
+          }
+        } catch {
+          // fall through
+        }
+      }
+
+      // 2. Try local IndexedDB + localStorage fallback (same device)
+      try {
+        const url = await getVideoObjectURLWithFallback(userId.toString());
+        if (!cancelled && url) {
           objectUrl = url;
           setVideoObjectUrl(url);
         }
-      })
-      .catch(() => {
+      } catch {
         // silently ignore
-      });
+      }
+    };
+
+    loadVideo();
+
     return () => {
+      cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [userId]);
+  }, [userId, actor]);
 
-  // Query worker's certification (for citizen view)
+  // Query worker's certification (for all viewers — citizen and worker alike)
   const { data: workerCert } = useQuery<CertificationResult | null>({
     queryKey: ["cert", userId?.toString()],
     queryFn: async () => {
       if (!actor || !userId) return null;
+      // Also check localStorage as a fast/offline fallback
+      const localCert = localStorage.getItem(`knot_cert_${userId.toString()}`);
+      if (localCert) {
+        try {
+          return JSON.parse(localCert) as CertificationResult;
+        } catch {
+          // fall through to backend
+        }
+      }
       return actor.getCertification(userId);
     },
-    enabled: !!actor && !isFetching && !!userId && isCitizen,
+    enabled: !!userId,
   });
 
-  // Fire a profile_view notification whenever someone opens a worker's profile
+  // Fire a profile_view notification to the WORKER whose profile is being viewed.
+  // We intentionally only run this once when the profile id changes, so we read
+  // authUser from a ref to avoid re-triggering on every render.
   useEffect(() => {
-    addNotification({
+    if (!userId) return;
+    const viewer = authUserRef.current;
+    // Don't fire for self-views
+    if (viewer && String(viewer.id) === String(userId)) return;
+    const viewerName = viewer?.name ?? "Someone";
+    addNotificationForUser(userId.toString(), {
       type: "profile_view",
-      message: "Someone viewed your profile",
+      message: `${viewerName} viewed your profile`,
     });
-  }, [addNotification]);
+  }, [userId]);
 
   async function handleEndorse() {
     if (!userId) return;
@@ -111,10 +150,10 @@ export function ProfilePage() {
       setEndorsed(true);
       await refetch();
       toast.success(t("success_endorsed"));
-      // Fire real-time endorsement notification
-      addNotification({
+      // Fire real-time endorsement notification to the endorsed worker
+      addNotificationForUser(userId.toString(), {
         type: "endorsement",
-        message: "Someone endorsed your profile",
+        message: `${authUser?.name ?? "Someone"} endorsed your profile`,
       });
     } catch {
       toast.error(t("error_endorse_failed"));
@@ -139,12 +178,14 @@ export function ProfilePage() {
       });
       toast.success(t("success_request_sent"));
       setLearnModalOpen(false);
-      // Fire real-time learning request notification
-      addNotification({
-        type: "learning_request",
-        message: `${requesterName.trim()} sent you a learning request`,
-      });
-      setRequesterName("");
+      // Fire real-time learning request notification to the worker
+      if (userId) {
+        addNotificationForUser(userId.toString(), {
+          type: "learning_request",
+          message: `${requesterName.trim()} sent you a learning request`,
+        });
+      }
+      setRequesterName(authUser?.name ?? "");
       setLearnMessage("");
     } catch {
       toast.error(t("error_request_failed"));
@@ -246,9 +287,9 @@ export function ProfilePage() {
               {ytId ? (
                 <iframe
                   className="w-full h-full"
-                  src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&enablejsapi=1`}
+                  src={`https://www.youtube.com/embed/${ytId}?mute=1&enablejsapi=1`}
                   title={`${user.name}'s skill video`}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 />
               ) : videoObjectUrl ? (
@@ -256,19 +297,19 @@ export function ProfilePage() {
                   key={videoObjectUrl}
                   className="w-full h-full object-contain"
                   src={videoObjectUrl}
-                  autoPlay
                   muted
                   playsInline
                   controls
+                  preload="metadata"
                 />
               ) : user.videoURL ? (
                 <video
                   className="w-full h-full object-contain"
                   src={user.videoURL}
-                  autoPlay
                   muted
                   playsInline
                   controls
+                  preload="metadata"
                 />
               ) : (
                 <>
@@ -382,21 +423,45 @@ export function ProfilePage() {
                   {t("profile_request_learn")}
                 </Button>
 
-                {/* View Certificate (if worker has passed) */}
-                {workerCert?.passed && (
-                  <Button
-                    variant="outline"
-                    className="w-full h-11 gap-2 font-body font-semibold border-amber-400 text-amber-700 hover:bg-amber-50"
-                    onClick={() => {
-                      localStorage.setItem("knot_view_cert_name", user.name);
-                      localStorage.setItem("knot_view_cert_skill", user.skill);
-                      navigate({ to: "/certificate" });
-                    }}
-                  >
-                    <Award className="w-4 h-4" />
-                    View Certificate
-                  </Button>
-                )}
+                {/* Certification status */}
+                {(() => {
+                  let certData = workerCert;
+                  if (!certData && userId) {
+                    const localCert = localStorage.getItem(
+                      `knot_cert_${userId.toString()}`,
+                    );
+                    if (localCert) {
+                      try {
+                        certData = JSON.parse(localCert) as CertificationResult;
+                      } catch {
+                        /* ignore */
+                      }
+                    }
+                  }
+                  const hasCert = certData?.passed === true;
+                  return hasCert ? (
+                    <Button
+                      variant="outline"
+                      className="w-full h-11 gap-2 font-body font-semibold border-amber-400 text-amber-700 hover:bg-amber-50"
+                      onClick={() => {
+                        localStorage.setItem("knot_view_cert_name", user.name);
+                        localStorage.setItem(
+                          "knot_view_cert_skill",
+                          user.skill,
+                        );
+                        navigate({ to: "/certificate" });
+                      }}
+                    >
+                      <Award className="w-4 h-4" />
+                      View Certificate
+                    </Button>
+                  ) : (
+                    <div className="w-full h-11 flex items-center justify-center gap-2 rounded-lg border border-muted bg-muted/40 text-muted-foreground text-sm font-body font-medium">
+                      <Shield className="w-4 h-4" />
+                      No certification completed
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -498,9 +563,9 @@ export function ProfilePage() {
             {ytId ? (
               <iframe
                 className="w-full h-full"
-                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&enablejsapi=1`}
+                src={`https://www.youtube.com/embed/${ytId}?mute=1&enablejsapi=1`}
                 title={`${user.name}'s skill video`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
             ) : videoObjectUrl ? (
@@ -508,19 +573,19 @@ export function ProfilePage() {
                 key={videoObjectUrl}
                 className="w-full h-full object-contain"
                 src={videoObjectUrl}
-                autoPlay
                 muted
                 playsInline
                 controls
+                preload="metadata"
               />
             ) : user.videoURL ? (
               <video
                 className="w-full h-full object-contain"
                 src={user.videoURL}
-                autoPlay
                 muted
                 playsInline
                 controls
+                preload="metadata"
               />
             ) : (
               <>
@@ -690,28 +755,29 @@ export function ProfilePage() {
               </div>
             </div>
 
-            {/* Action buttons — endorse only for workers */}
+            {/* Action buttons — endorse only for workers viewing another worker */}
             <div className="flex flex-col sm:flex-row gap-3">
-              {authUser?.role !== "citizen" && (
-                <Button
-                  onClick={handleEndorse}
-                  disabled={endorseMutation.isPending || endorsed}
-                  className="flex-1 h-11 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-body font-semibold"
-                >
-                  {endorseMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : endorsed ? (
-                    <CheckCircle2 className="w-4 h-4" />
-                  ) : (
-                    <ThumbsUp className="w-4 h-4" />
-                  )}
-                  {endorseMutation.isPending
-                    ? t("profile_endorsing")
-                    : endorsed
-                      ? t("profile_endorsed")
-                      : `${t("profile_endorse")} ${user.name.split(" ")[0]}`}
-                </Button>
-              )}
+              {authUser?.role === "worker" &&
+                String(authUser?.id) !== String(userId) && (
+                  <Button
+                    onClick={handleEndorse}
+                    disabled={endorseMutation.isPending || endorsed}
+                    className="flex-1 h-11 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-body font-semibold"
+                  >
+                    {endorseMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : endorsed ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <ThumbsUp className="w-4 h-4" />
+                    )}
+                    {endorseMutation.isPending
+                      ? t("profile_endorsing")
+                      : endorsed
+                        ? t("profile_endorsed")
+                        : `${t("profile_endorse")} ${user.name.split(" ")[0]}`}
+                  </Button>
+                )}
 
               <Button
                 variant="outline"
@@ -724,6 +790,54 @@ export function ProfilePage() {
                 {t("profile_request_learn")}
               </Button>
             </div>
+
+            {/* Certification button — always visible */}
+            {(() => {
+              // Check localStorage first (fast/offline), then fall back to query result
+              let certData = workerCert;
+              if (!certData && userId) {
+                const localCert = localStorage.getItem(
+                  `knot_cert_${userId.toString()}`,
+                );
+                if (localCert) {
+                  try {
+                    certData = JSON.parse(localCert) as CertificationResult;
+                  } catch {
+                    // ignore
+                  }
+                }
+              }
+              const hasCert = certData?.passed === true;
+              return (
+                <div className="mt-3">
+                  {hasCert ? (
+                    <Button
+                      className="w-full h-11 gap-2 font-body font-semibold bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-500/25"
+                      onClick={() => {
+                        localStorage.setItem("knot_view_cert_name", user.name);
+                        localStorage.setItem(
+                          "knot_view_cert_skill",
+                          user.skill,
+                        );
+                        navigate({ to: "/certificate" });
+                      }}
+                    >
+                      <Award className="w-4 h-4" />
+                      View Certificate
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="w-full h-11 gap-2 font-body font-semibold border-muted text-muted-foreground cursor-not-allowed opacity-60"
+                    >
+                      <Shield className="w-4 h-4" />
+                      Not Certified Yet
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

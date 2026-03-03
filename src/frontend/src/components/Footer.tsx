@@ -14,7 +14,7 @@ export function Footer() {
             <div className="flex items-center gap-2.5 mb-3">
               <div className="w-8 h-8 rounded-lg overflow-hidden ring-1 ring-white/20">
                 <img
-                  src="/assets/uploads/WhatsApp-Image-2026-02-27-at-10.42.55-1.jpeg"
+                  src="/assets/uploads/image-14-1.png"
                   alt="KNOT"
                   className="w-full h-full object-cover"
                 />
@@ -59,16 +59,8 @@ export function Footer() {
             © 2026 KNOT. Skills • Trust • Community
           </p>
           <p className="text-white/40 text-xs font-body flex items-center gap-1">
-            Built with <Heart className="w-3 h-3 text-accent fill-accent" />{" "}
-            using{" "}
-            <a
-              href="https://caffeine.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/60 hover:text-white/80 transition-colors underline underline-offset-2"
-            >
-              caffeine.ai
-            </a>
+            Made with <Heart className="w-3 h-3 text-accent fill-accent" /> for
+            vocational communities
           </p>
         </div>
       </div>

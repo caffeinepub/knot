@@ -89,16 +89,6 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface CertificationResult {
-    workerId: bigint;
-    level: string;
-    issuedDate: Time;
-    skill: string;
-    certificateId: string;
-    mcqScore: bigint;
-    practicalPassed: boolean;
-    passed: boolean;
-}
 export interface LearningRequest {
     id: bigint;
     message: string;
@@ -107,6 +97,14 @@ export interface LearningRequest {
     targetUserId: bigint;
 }
 export type Time = bigint;
+export interface PracticalVideoSubmission {
+    status: string;
+    workerId: bigint;
+    videoDataURI: string;
+    submittedAt: Time;
+    skill: string;
+    workerName: string;
+}
 export interface User {
     id: bigint;
     bio: string;
@@ -120,34 +118,119 @@ export interface User {
     videoURL: string;
     location: string;
 }
+export interface CertificationResult {
+    workerId: bigint;
+    level: string;
+    issuedDate: Time;
+    skill: string;
+    certificateId: string;
+    mcqScore: bigint;
+    practicalPassed: boolean;
+    passed: boolean;
+}
 export interface Citizen {
     id: bigint;
     name: string;
     address: string;
 }
+export interface UserProfile {
+    userType: string;
+    userId: bigint;
+    name: string;
+}
+export enum UserRole {
+    admin = "admin",
+    user = "user",
+    guest = "guest"
+}
 export interface backendInterface {
+    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
+    approvePracticalVideo(workerId: bigint): Promise<boolean>;
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     clearAllData(): Promise<void>;
     endorseUser(id: bigint): Promise<void>;
     findCitizenByName(name: string): Promise<Citizen | null>;
     findWorkerByName(name: string): Promise<User | null>;
+    getAdminStats(): Promise<{
+        totalWorkers: bigint;
+        totalCitizens: bigint;
+        totalCertified: bigint;
+        totalRequests: bigint;
+    }>;
+    getAllCitizens(): Promise<Array<Citizen>>;
     getAllLearningRequests(): Promise<Array<LearningRequest>>;
     getAllUsers(): Promise<Array<User>>;
+    getCallerUserProfile(): Promise<UserProfile | null>;
+    getCallerUserRole(): Promise<UserRole>;
     getCertification(workerId: bigint): Promise<CertificationResult | null>;
     getLearningRequestsForWorker(workerId: bigint): Promise<Array<LearningRequest>>;
+    getPendingPracticalVideos(): Promise<Array<PracticalVideoSubmission>>;
+    getPracticalVideoStatus(workerId: bigint): Promise<string>;
     getUser(id: bigint): Promise<User>;
+    getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsersByDistance(maxDistance: bigint): Promise<Array<User>>;
     getUsersBySkill(skill: string): Promise<Array<User>>;
     getWorkerStats(id: bigint): Promise<User>;
-    init(): Promise<void>;
-    registerCitizen(name: string, address: string): Promise<bigint>;
-    registerWorker(name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint, contact: string): Promise<bigint>;
+    getWorkerVideo(workerId: bigint): Promise<string>;
+    isCallerAdmin(): Promise<boolean>;
+    loginAdmin(username: string, passwordHash: string): Promise<boolean>;
+    loginCitizen(username: string, passwordHash: string): Promise<Citizen | null>;
+    loginWorker(username: string, passwordHash: string): Promise<User | null>;
+    registerCitizen(name: string, address: string, username: string, passwordHash: string): Promise<bigint>;
+    registerWorker(username: string, passwordHash: string, name: string, skill: string, location: string, bio: string, videoURL: string, distance: bigint, contact: string): Promise<bigint>;
+    rejectPracticalVideo(workerId: bigint): Promise<boolean>;
+    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    saveWorkerVideo(workerId: bigint, dataURI: string): Promise<void>;
     searchUsers(searchText: string): Promise<Array<User>>;
     submitLearningRequest(requesterId: string, targetUserId: bigint, message: string): Promise<void>;
+    submitPracticalVideo(workerId: bigint, workerName: string, skill: string, videoDataURI: string): Promise<void>;
     submitTestResult(workerId: bigint, mcqScore: bigint, practicalPassed: boolean): Promise<boolean>;
 }
-import type { CertificationResult as _CertificationResult, Citizen as _Citizen, User as _User } from "./declarations/backend.did.d.ts";
+import type { CertificationResult as _CertificationResult, Citizen as _Citizen, User as _User, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor._initializeAccessControlWithSecret(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor._initializeAccessControlWithSecret(arg0);
+            return result;
+        }
+    }
+    async approvePracticalVideo(arg0: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.approvePracticalVideo(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.approvePracticalVideo(arg0);
+            return result;
+        }
+    }
+    async assignCallerUserRole(arg0: Principal, arg1: UserRole): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n1(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n1(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
     async clearAllData(): Promise<void> {
         if (this.processError) {
             try {
@@ -180,28 +263,61 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.findCitizenByName(arg0);
-                return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.findCitizenByName(arg0);
-            return from_candid_opt_n1(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
         }
     }
     async findWorkerByName(arg0: string): Promise<User | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.findWorkerByName(arg0);
-                return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.findWorkerByName(arg0);
-            return from_candid_opt_n2(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getAdminStats(): Promise<{
+        totalWorkers: bigint;
+        totalCitizens: bigint;
+        totalCertified: bigint;
+        totalRequests: bigint;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAdminStats();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAdminStats();
+            return result;
+        }
+    }
+    async getAllCitizens(): Promise<Array<Citizen>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllCitizens();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllCitizens();
+            return result;
         }
     }
     async getAllLearningRequests(): Promise<Array<LearningRequest>> {
@@ -232,18 +348,46 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getCallerUserProfile(): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallerUserProfile();
+                return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallerUserProfile();
+            return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCallerUserRole(): Promise<UserRole> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallerUserRole();
+                return from_candid_UserRole_n6(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallerUserRole();
+            return from_candid_UserRole_n6(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getCertification(arg0: bigint): Promise<CertificationResult | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCertification(arg0);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCertification(arg0);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
         }
     }
     async getLearningRequestsForWorker(arg0: bigint): Promise<Array<LearningRequest>> {
@@ -260,6 +404,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getPendingPracticalVideos(): Promise<Array<PracticalVideoSubmission>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPendingPracticalVideos();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPendingPracticalVideos();
+            return result;
+        }
+    }
+    async getPracticalVideoStatus(arg0: bigint): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPracticalVideoStatus(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPracticalVideoStatus(arg0);
+            return result;
+        }
+    }
     async getUser(arg0: bigint): Promise<User> {
         if (this.processError) {
             try {
@@ -272,6 +444,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getUser(arg0);
             return result;
+        }
+    }
+    async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserProfile(arg0);
+                return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserProfile(arg0);
+            return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUsersByDistance(arg0: bigint): Promise<Array<User>> {
@@ -316,45 +502,143 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async init(): Promise<void> {
+    async getWorkerVideo(arg0: bigint): Promise<string> {
         if (this.processError) {
             try {
-                const result = await this.actor.init();
+                const result = await this.actor.getWorkerVideo(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.init();
+            const result = await this.actor.getWorkerVideo(arg0);
             return result;
         }
     }
-    async registerCitizen(arg0: string, arg1: string): Promise<bigint> {
+    async isCallerAdmin(): Promise<boolean> {
         if (this.processError) {
             try {
-                const result = await this.actor.registerCitizen(arg0, arg1);
+                const result = await this.actor.isCallerAdmin();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.registerCitizen(arg0, arg1);
+            const result = await this.actor.isCallerAdmin();
             return result;
         }
     }
-    async registerWorker(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: bigint, arg6: string): Promise<bigint> {
+    async loginAdmin(arg0: string, arg1: string): Promise<boolean> {
         if (this.processError) {
             try {
-                const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+                const result = await this.actor.loginAdmin(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+            const result = await this.actor.loginAdmin(arg0, arg1);
+            return result;
+        }
+    }
+    async loginCitizen(arg0: string, arg1: string): Promise<Citizen | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.loginCitizen(arg0, arg1);
+                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.loginCitizen(arg0, arg1);
+            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async loginWorker(arg0: string, arg1: string): Promise<User | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.loginWorker(arg0, arg1);
+                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.loginWorker(arg0, arg1);
+            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async registerCitizen(arg0: string, arg1: string, arg2: string, arg3: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerCitizen(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerCitizen(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
+    async registerWorker(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: bigint, arg8: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerWorker(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+            return result;
+        }
+    }
+    async rejectPracticalVideo(arg0: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.rejectPracticalVideo(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.rejectPracticalVideo(arg0);
+            return result;
+        }
+    }
+    async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveCallerUserProfile(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveCallerUserProfile(arg0);
+            return result;
+        }
+    }
+    async saveWorkerVideo(arg0: bigint, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveWorkerVideo(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveWorkerVideo(arg0, arg1);
             return result;
         }
     }
@@ -386,6 +670,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async submitPracticalVideo(arg0: bigint, arg1: string, arg2: string, arg3: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.submitPracticalVideo(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.submitPracticalVideo(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
     async submitTestResult(arg0: bigint, arg1: bigint, arg2: boolean): Promise<boolean> {
         if (this.processError) {
             try {
@@ -401,14 +699,47 @@ export class Backend implements backendInterface {
         }
     }
 }
-function from_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Citizen]): Citizen | null {
+function from_candid_UserRole_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n7(_uploadFile, _downloadFile, value);
+}
+function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Citizen]): Citizen | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_User]): User | null {
+function from_candid_opt_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_User]): User | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CertificationResult]): CertificationResult | null {
+function from_candid_opt_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_CertificationResult]): CertificationResult | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_variant_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    admin: null;
+} | {
+    user: null;
+} | {
+    guest: null;
+}): UserRole {
+    return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
+}
+function to_candid_UserRole_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
+    return to_candid_variant_n2(_uploadFile, _downloadFile, value);
+}
+function to_candid_variant_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
+    admin: null;
+} | {
+    user: null;
+} | {
+    guest: null;
+} {
+    return value == UserRole.admin ? {
+        admin: null
+    } : value == UserRole.user ? {
+        user: null
+    } : value == UserRole.guest ? {
+        guest: null
+    } : value;
 }
 export interface CreateActorOptions {
     agent?: Agent;

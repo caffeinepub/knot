@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  Clock,
   FileVideo,
   Loader2,
   PlayCircle,
@@ -17,27 +17,92 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useMemo } from "react";
+import { BannerAd, PopupAd } from "../components/PopupAd";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { getAuthUser } from "../utils/auth";
 
 // ─── Text-to-Speech ─────────────────────────────────────────────────────────
 
+const LANG_BCP47: Record<string, string> = {
+  en: "en-IN",
+  te: "te-IN",
+  hi: "hi-IN",
+  ml: "ml-IN",
+  kn: "kn-IN",
+};
+
+// BCP-47 prefix fallbacks so we still get a regional voice if exact locale missing
+const LANG_PREFIX_FALLBACK: Record<string, string> = {
+  en: "en",
+  te: "te",
+  hi: "hi",
+  ml: "ml",
+  kn: "kn",
+};
+
+function pickVoice(targetLang: string): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices();
+  const exact = LANG_BCP47[targetLang] ?? "en-IN";
+  const prefix = LANG_PREFIX_FALLBACK[targetLang] ?? "en";
+
+  // 1. exact locale match (e.g. "te-IN")
+  let voice = voices.find((v) => v.lang.toLowerCase() === exact.toLowerCase());
+  if (voice) return voice;
+
+  // 2. prefix match (e.g. any voice starting with "te")
+  voice = voices.find((v) =>
+    v.lang.toLowerCase().startsWith(prefix.toLowerCase()),
+  );
+  if (voice) return voice;
+
+  // 3. For non-English languages without a local voice, prefer a neutral English voice
+  //    over silently failing — the text won't be in English but at least something plays.
+  //    Actually: just return null and let the browser use its default for that lang code.
+  return null;
+}
+
 function speakText(text: string, langCode: string) {
   if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel(); // stop any ongoing speech
-  const utterance = new SpeechSynthesisUtterance(text);
-  const langMap: Record<string, string> = {
-    en: "en-IN",
-    te: "te-IN",
-    hi: "hi-IN",
-    ml: "ml-IN",
-    kn: "kn-IN",
-  };
-  utterance.lang = langMap[langCode] ?? "en-IN";
-  utterance.rate = 0.9;
-  utterance.pitch = 1;
-  window.speechSynthesis.speak(utterance);
+  window.speechSynthesis.cancel();
+
+  function doSpeak() {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = LANG_BCP47[langCode] ?? "en-IN";
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+
+    const voice = pickVoice(langCode);
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Voices may not be loaded yet on first call — wait for them
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) {
+    doSpeak();
+  } else {
+    // One-time listener: fires when voices load, then immediately removed
+    const onVoicesChanged = () => {
+      window.speechSynthesis.removeEventListener(
+        "voiceschanged",
+        onVoicesChanged,
+      );
+      doSpeak();
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", onVoicesChanged);
+    // Safety timeout: speak anyway after 800ms in case event never fires
+    setTimeout(() => {
+      window.speechSynthesis.removeEventListener(
+        "voiceschanged",
+        onVoicesChanged,
+      );
+      doSpeak();
+    }, 800);
+  }
 }
 
 // ─── Question Bank ─────────────────────────────────────────────────────────────
@@ -89,7 +154,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
         mcq: [
           {
             id: 1,
-            question: "వీడియోలో చూపిన చెక్క జాయింట్ ఏది?",
+            question: "వడ్రంగిలో అత్యంత బలమైన చెక్క జాయింట్ ఏది?",
             options: ["డవ్‌టెయిల్", "బట్ జాయింట్", "మోర్టైస్", "లాప్ జాయింట్"],
             correctIndex: 0,
           },
@@ -125,7 +190,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
           },
           {
             id: 7,
-            question: "వీడియోలో చూపిన స్క్రూ రకం ఏది?",
+            question: "చెక్కపై పని కోసం అత్యంత వాడుకలో ఉన్న స్క్రూ రకం ఏది?",
             options: ["ఫిలిప్స్", "ఫ్లాట్", "టోర్క్స్", "హెక్స్"],
             correctIndex: 0,
           },
@@ -154,7 +219,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
         mcq: [
           {
             id: 1,
-            question: "वीडियो में दिखाया गया लकड़ी का जोड़ कौन सा है?",
+            question: "बढ़ईगीरी में सबसे मजबूत लकड़ी का जोड़ कौन सा है?",
             options: ["डवटेल", "बट जॉइंट", "मोर्टाइस", "लैप जॉइंट"],
             correctIndex: 0,
           },
@@ -190,7 +255,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
           },
           {
             id: 7,
-            question: "वीडियो में दिखाया गया स्क्रू किस प्रकार का है?",
+            question: "लकड़ी के काम में सबसे अधिक उपयोग होने वाला स्क्रू कौन सा है?",
             options: ["फिलिप्स", "फ्लैट", "टोर्क्स", "हेक्स"],
             correctIndex: 0,
           },
@@ -219,7 +284,8 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
       mcq: [
         {
           id: 1,
-          question: "What type of wood joint is shown in the video?",
+          question:
+            "Which wood joint is considered the strongest for furniture?",
           options: ["Dovetail", "Butt joint", "Mortise", "Lap joint"],
           correctIndex: 0,
         },
@@ -256,7 +322,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
         },
         {
           id: 7,
-          question: "Which screw type is shown in the video?",
+          question: "Which screw type is most commonly used in woodworking?",
           options: ["Phillips", "Flat", "Torx", "Hex"],
           correctIndex: 0,
         },
@@ -299,7 +365,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
           },
           {
             id: 2,
-            question: "వీడియోలో చూపిన బట్ట ఏది?",
+            question: "వేసవి దుస్తులకు అత్యంత అనుకూలమైన బట్ట ఏది?",
             options: ["కాటన్", "సిల్క్", "పాలిస్టర్", "ఉల్"],
             correctIndex: 0,
           },
@@ -370,7 +436,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
           },
           {
             id: 2,
-            question: "वीडियो में दिखाया गया कपड़ा कौन सा है?",
+            question: "गर्मियों के कपड़ों के लिए सबसे उपयुक्त कपड़ा कौन सा है?",
             options: ["कॉटन", "सिल्क", "पॉलिएस्टर", "ऊन"],
             correctIndex: 0,
           },
@@ -451,7 +517,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
         },
         {
           id: 2,
-          question: "Which fabric is shown in the video?",
+          question: "Which fabric is best suited for summer garments?",
           options: ["Cotton", "Silk", "Polyester", "Wool"],
           correctIndex: 0,
         },
@@ -528,7 +594,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
         mcq: [
           {
             id: 1,
-            question: "వీడియోలో చూపిన పైప్ ఫిట్టింగ్ రకం ఏది?",
+            question: "మూడు పైపులను కలిపే ప్లంబింగ్ ఫిట్టింగ్ రకం ఏది?",
             options: ["ఎల్బో", "టీ", "కప్లర్", "రెడ్యూసర్"],
             correctIndex: 1,
           },
@@ -593,7 +659,7 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
         mcq: [
           {
             id: 1,
-            question: "वीडियो में दिखाया गया पाइप फिटिंग कौन सा है?",
+            question: "तीन पाइपों को जोड़ने वाली प्लंबिंग फिटिंग कौन सी है?",
             options: ["एल्बो", "टी", "कपलर", "रेड्यूसर"],
             correctIndex: 1,
           },
@@ -663,7 +729,8 @@ function getQuestionBank(skill: string, lang: string): QuestionBank {
       mcq: [
         {
           id: 1,
-          question: "What type of pipe fitting is shown in the video?",
+          question:
+            "Which pipe fitting is used to connect three pipes together?",
           options: ["Elbow", "Tee", "Coupler", "Reducer"],
           correctIndex: 1,
         },
@@ -1006,6 +1073,7 @@ interface TestResult {
   mcqScore: number;
   practicalPassed: boolean;
   passed: boolean;
+  pendingReview: boolean;
 }
 
 // ─── Option Button ─────────────────────────────────────────────────────────────
@@ -1097,19 +1165,14 @@ export function CertificationTestPage() {
     };
   }, []);
 
-  const submitMutation = useMutation({
-    mutationFn: async ({
-      mcqScore,
-      practicalPassed,
-    }: { mcqScore: number; practicalPassed: boolean }) => {
-      if (!actor || !authUser) throw new Error("No actor");
-      return actor.submitTestResult(
-        authUser.id,
-        BigInt(mcqScore),
-        practicalPassed,
-      );
-    },
-  });
+  async function readFileAsBase64(file: File): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
 
   function selectAnswer(qIndex: number, optionIndex: number) {
     setAnswers((prev) => {
@@ -1135,33 +1198,124 @@ export function CertificationTestPage() {
   async function handleSubmit() {
     setPhase("evaluating");
 
-    // Simulate evaluation delay
-    await new Promise((res) => setTimeout(res, 2500));
-
-    // Count correct answers based on actual user responses (null = unanswered = wrong)
+    // Count correct answers first (synchronous, no delay)
     const mcqScore = answers.reduce<number>((count, answer, idx) => {
       return (
         count +
         (answer !== null && answer === bank.mcq[idx].correctIndex ? 1 : 0)
       );
     }, 0);
-    const practicalPassed = true; // Any uploaded video is accepted
-    const passed = mcqScore >= 6 && practicalPassed;
+    const practicalPassed = practicalFile !== null;
 
-    try {
-      await submitMutation.mutateAsync({ mcqScore, practicalPassed });
-    } catch {
-      // Continue even if backend fails (demo mode)
-    }
+    // Show evaluation animation for at least 2.5s but never hang
+    await new Promise((res) => setTimeout(res, 2500));
 
-    // Persist pass status to localStorage so Navbar and CertificatePage can read it
-    if (passed) {
-      localStorage.setItem("knot_cert_passed", "true");
+    if (mcqScore >= 6 && practicalPassed && authUser) {
+      // Submit practical video for admin review — with a strict 10s timeout so it never hangs
+      try {
+        const base64 = await readFileAsBase64(practicalFile!);
+        if (actor) {
+          await Promise.race([
+            actor.submitPracticalVideo(
+              authUser.id,
+              authUser.name,
+              skill,
+              base64,
+            ),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), 10000),
+            ),
+          ]);
+        }
+      } catch {
+        // Continue even if backend upload fails or times out
+      }
+
+      // Store pending review status
+      const workerIdStr = authUser.id.toString();
+      localStorage.setItem(`knot_cert_status_${workerIdStr}`, "pending_review");
+      localStorage.setItem(`knot_cert_mcq_${workerIdStr}`, mcqScore.toString());
+      // Save cert data as pending (not passed yet)
+      localStorage.setItem(
+        `knot_cert_${workerIdStr}`,
+        JSON.stringify({
+          passed: false,
+          skill,
+          mcqScore,
+          practicalPassed: true,
+          certificateId: "",
+          level: "",
+          issuedDate: Date.now(),
+          workerId: workerIdStr,
+          pendingReview: true,
+        }),
+      );
+
+      // Submit MCQ result to backend (passed=false until admin approves)
+      try {
+        if (actor) {
+          await Promise.race([
+            actor.submitTestResult(authUser.id, BigInt(mcqScore), false),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), 5000),
+            ),
+          ]);
+        }
+      } catch {
+        // Continue even if backend fails or times out
+      }
+
+      setResult({
+        mcqScore,
+        practicalPassed: true,
+        passed: false,
+        pendingReview: true,
+      });
     } else {
-      localStorage.removeItem("knot_cert_passed");
+      // Failed — mcq score too low or no practical video
+      if (authUser) {
+        const workerIdStr = authUser.id.toString();
+        localStorage.setItem(`knot_cert_status_${workerIdStr}`, "failed");
+        localStorage.removeItem("knot_cert_passed");
+        localStorage.setItem(
+          `knot_cert_${workerIdStr}`,
+          JSON.stringify({
+            passed: false,
+            skill,
+            mcqScore,
+            practicalPassed,
+            certificateId: "",
+            level: "",
+            issuedDate: Date.now(),
+            workerId: workerIdStr,
+            pendingReview: false,
+          }),
+        );
+        try {
+          if (actor) {
+            await Promise.race([
+              actor.submitTestResult(
+                authUser.id,
+                BigInt(mcqScore),
+                practicalPassed,
+              ),
+              new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error("timeout")), 5000),
+              ),
+            ]);
+          }
+        } catch {
+          // Continue even if backend fails or times out
+        }
+      }
+      setResult({
+        mcqScore,
+        practicalPassed,
+        passed: false,
+        pendingReview: false,
+      });
     }
 
-    setResult({ mcqScore, practicalPassed, passed });
     setPhase("result");
   }
 
@@ -1230,6 +1384,7 @@ export function CertificationTestPage() {
         )}
       </div>
 
+      <PopupAd />
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <AnimatePresence mode="wait">
           {/* ── Intro Phase ── */}
@@ -1430,6 +1585,9 @@ export function CertificationTestPage() {
                   </CardContent>
                 </Card>
 
+                {/* Banner ad between question and next button */}
+                <BannerAd />
+
                 {/* Navigation */}
                 <Button
                   className="w-full h-11 gap-2 font-body font-semibold"
@@ -1591,116 +1749,210 @@ export function CertificationTestPage() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <Card
-                className={`border-2 shadow-card overflow-hidden ${result.passed ? "border-green-300" : "border-orange-300"}`}
-              >
-                {/* Result header */}
-                <div
-                  className={`p-8 text-center ${
-                    result.passed
-                      ? "bg-gradient-to-br from-green-500 to-green-600"
-                      : "bg-gradient-to-br from-orange-400 to-orange-500"
-                  }`}
+              {/* Pending Review Card */}
+              {result.pendingReview ? (
+                <Card className="border-2 border-blue-300 shadow-card overflow-hidden">
+                  <div className="p-8 text-center bg-gradient-to-br from-blue-500 to-blue-600">
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{
+                        delay: 0.2,
+                        type: "spring",
+                        stiffness: 200,
+                      }}
+                      className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
+                    >
+                      <Clock className="w-10 h-10 text-white" />
+                    </motion.div>
+                    <h2 className="font-display font-bold text-2xl text-white mb-1">
+                      Under Review
+                    </h2>
+                    <p className="text-white/80 font-body text-sm">
+                      Admin will evaluate your practical video
+                    </p>
+                  </div>
+                  <CardContent className="p-8 space-y-6">
+                    {/* Score display */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-center">
+                        <p className="font-body text-xs text-blue-600 mb-1">
+                          {t("cert_score_label")}
+                        </p>
+                        <p className="font-display font-bold text-3xl text-blue-800">
+                          {result.mcqScore}
+                          <span className="text-blue-500 text-xl">/9</span>
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-center">
+                        <p className="font-body text-xs text-blue-600 mb-1">
+                          Practical Video
+                        </p>
+                        <p className="font-display font-bold text-base text-blue-800">
+                          ✅ Submitted
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progress bar for MCQ */}
+                    <div>
+                      <div className="flex justify-between font-body text-xs text-muted-foreground mb-2">
+                        <span>{t("cert_score_label")}</span>
+                        <span>{result.mcqScore}/9 ✓ Passed MCQ</span>
+                      </div>
+                      <Progress
+                        value={(result.mcqScore / 9) * 100}
+                        className="h-2"
+                      />
+                    </div>
+
+                    {/* Status message */}
+                    <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
+                      <div className="flex items-start gap-3">
+                        <Clock className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-body font-semibold text-sm text-blue-800 mb-1">
+                            MCQ Passed! ({result.mcqScore}/9 correct)
+                          </p>
+                          <p className="font-body text-sm text-blue-700 leading-relaxed">
+                            Your practical video has been submitted for admin
+                            review. You will be notified in your bell when
+                            approved or rejected.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      className="w-full h-12 gap-2 font-body font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => navigate({ to: "/worker-dashboard" })}
+                    >
+                      {t("cert_go_dashboard")}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                /* Pass / Fail Card */
+                <Card
+                  className={`border-2 shadow-card overflow-hidden ${result.passed ? "border-green-300" : "border-orange-300"}`}
                 >
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                    className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
+                  {/* Result header */}
+                  <div
+                    className={`p-8 text-center ${
+                      result.passed
+                        ? "bg-gradient-to-br from-green-500 to-green-600"
+                        : "bg-gradient-to-br from-orange-400 to-orange-500"
+                    }`}
                   >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{
+                        delay: 0.2,
+                        type: "spring",
+                        stiffness: 200,
+                      }}
+                      className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
+                    >
+                      {result.passed ? (
+                        <Trophy className="w-10 h-10 text-white" />
+                      ) : (
+                        <AlertCircle className="w-10 h-10 text-white" />
+                      )}
+                    </motion.div>
+                    <h2 className="font-display font-bold text-2xl text-white">
+                      {result.passed
+                        ? t("cert_passed_title")
+                        : t("cert_failed")}
+                    </h2>
+                  </div>
+
+                  <CardContent className="p-8 space-y-6">
+                    {/* Score breakdown */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 rounded-xl bg-muted/50 border border-border text-center">
+                        <p className="font-body text-xs text-muted-foreground mb-1">
+                          {t("cert_score_label")}
+                        </p>
+                        <p className="font-display font-bold text-3xl text-foreground">
+                          {result.mcqScore}
+                          <span className="text-muted-foreground text-xl">
+                            /9
+                          </span>
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-muted/50 border border-border text-center">
+                        <p className="font-body text-xs text-muted-foreground mb-1">
+                          {t("cert_practical_label")}
+                        </p>
+                        <p
+                          className={`font-display font-bold text-xl ${result.practicalPassed ? "text-green-600" : "text-orange-500"}`}
+                        >
+                          {result.practicalPassed
+                            ? t("cert_practical_accepted")
+                            : t("cert_failed")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progress bar for MCQ */}
+                    <div>
+                      <div className="flex justify-between font-body text-xs text-muted-foreground mb-2">
+                        <span>{t("cert_score_label")}</span>
+                        <span>{result.mcqScore}/9</span>
+                      </div>
+                      <Progress
+                        value={(result.mcqScore / 9) * 100}
+                        className="h-2"
+                      />
+                    </div>
+
                     {result.passed ? (
-                      <Trophy className="w-10 h-10 text-white" />
+                      <div className="space-y-3">
+                        <Button
+                          className="w-full h-12 gap-2 font-body font-semibold text-base bg-green-600 hover:bg-green-700 text-white"
+                          onClick={() => navigate({ to: "/certificate" })}
+                        >
+                          <Trophy className="w-5 h-5" />
+                          {t("cert_view_certificate")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full font-body"
+                          onClick={() => navigate({ to: "/worker-dashboard" })}
+                        >
+                          {t("cert_go_dashboard")}
+                        </Button>
+                      </div>
                     ) : (
-                      <AlertCircle className="w-10 h-10 text-white" />
+                      <div className="space-y-3">
+                        <p className="text-center font-body text-sm text-orange-600 font-medium">
+                          Need 6+ MCQ correct AND a practical video to pass.
+                        </p>
+                        <Button
+                          className="w-full h-12 gap-2 font-body font-semibold"
+                          onClick={() => {
+                            setPhase("intro");
+                            setCurrentQ(0);
+                            setAnswers(Array(9).fill(null));
+                            setPracticalFile(null);
+                            setResult(null);
+                          }}
+                        >
+                          {t("cert_retry")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full font-body"
+                          onClick={() => navigate({ to: "/worker-dashboard" })}
+                        >
+                          {t("cert_go_dashboard")}
+                        </Button>
+                      </div>
                     )}
-                  </motion.div>
-                  <h2 className="font-display font-bold text-2xl text-white">
-                    {result.passed ? t("cert_passed_title") : t("cert_failed")}
-                  </h2>
-                </div>
-
-                <CardContent className="p-8 space-y-6">
-                  {/* Score breakdown */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl bg-muted/50 border border-border text-center">
-                      <p className="font-body text-xs text-muted-foreground mb-1">
-                        {t("cert_score_label")}
-                      </p>
-                      <p className="font-display font-bold text-3xl text-foreground">
-                        {result.mcqScore}
-                        <span className="text-muted-foreground text-xl">
-                          /9
-                        </span>
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-xl bg-muted/50 border border-border text-center">
-                      <p className="font-body text-xs text-muted-foreground mb-1">
-                        {t("cert_practical_label")}
-                      </p>
-                      <p
-                        className={`font-display font-bold text-xl ${result.practicalPassed ? "text-green-600" : "text-orange-500"}`}
-                      >
-                        {result.practicalPassed
-                          ? t("cert_practical_accepted")
-                          : t("cert_failed")}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Progress bar for MCQ */}
-                  <div>
-                    <div className="flex justify-between font-body text-xs text-muted-foreground mb-2">
-                      <span>{t("cert_score_label")}</span>
-                      <span>{result.mcqScore}/9</span>
-                    </div>
-                    <Progress
-                      value={(result.mcqScore / 9) * 100}
-                      className="h-2"
-                    />
-                  </div>
-
-                  {result.passed ? (
-                    <div className="space-y-3">
-                      <Button
-                        className="w-full h-12 gap-2 font-body font-semibold text-base bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => navigate({ to: "/certificate" })}
-                      >
-                        <Trophy className="w-5 h-5" />
-                        {t("cert_view_certificate")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="w-full font-body"
-                        onClick={() => navigate({ to: "/worker-dashboard" })}
-                      >
-                        {t("cert_go_dashboard")}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <Button
-                        className="w-full h-12 gap-2 font-body font-semibold"
-                        onClick={() => {
-                          setPhase("intro");
-                          setCurrentQ(0);
-                          setAnswers(Array(9).fill(null));
-                          setPracticalFile(null);
-                          setResult(null);
-                        }}
-                      >
-                        {t("cert_retry")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="w-full font-body"
-                        onClick={() => navigate({ to: "/worker-dashboard" })}
-                      >
-                        {t("cert_go_dashboard")}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
