@@ -275,7 +275,7 @@ export function HomePage() {
               className="font-body gap-2"
             >
               <RefreshCw className="w-4 h-4" />
-              Retry
+              {t("action_retry")}
             </Button>
           </div>
         ) : users &&
@@ -287,14 +287,14 @@ export function HomePage() {
           <div className="text-center py-20 animate-fade-in">
             <div className="text-6xl mb-4">🏗️</div>
             <h3 className="font-display font-semibold text-foreground text-xl mb-2">
-              No professionals registered yet
+              {t("home_no_workers")}
             </h3>
             <p className="text-muted-foreground font-body text-sm mb-6 max-w-xs mx-auto">
-              Workers who register on KNOT will appear here.
+              {t("home_no_workers_desc")}
             </p>
             <Link to="/login">
               <Button className="font-body bg-amber-600 hover:bg-amber-700 text-white gap-2">
-                Register as Worker
+                {t("login_register_as_worker")}
               </Button>
             </Link>
           </div>
@@ -303,12 +303,12 @@ export function HomePage() {
             <div className="text-6xl mb-4">🔍</div>
             <h3 className="font-display font-semibold text-foreground text-xl mb-2">
               {searchQuery.trim()
-                ? `No workers found for "${searchQuery}"`
+                ? `${t("error_no_professionals")}: "${searchQuery}"`
                 : t("error_no_professionals")}
             </h3>
             <p className="text-muted-foreground font-body text-sm max-w-xs mx-auto mb-4">
               {searchQuery.trim()
-                ? "Try a different name or skill name."
+                ? t("search_try_different")
                 : t("error_adjust_filters")}
             </p>
             {searchQuery.trim() && (
@@ -317,7 +317,7 @@ export function HomePage() {
                 onClick={() => setSearchQuery("")}
                 className="font-body text-sm"
               >
-                Clear search
+                {t("action_clear_search")}
               </Button>
             )}
           </div>
@@ -344,7 +344,7 @@ export function HomePage() {
                   <span>
                     {" "}
                     <span className="text-foreground font-semibold">
-                      within {selectedDistance}km
+                      {t("filter_within_km").replace("{n}", selectedDistance)}
                     </span>
                   </span>
                 )}

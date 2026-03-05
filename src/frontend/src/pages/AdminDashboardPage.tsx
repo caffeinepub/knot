@@ -47,6 +47,7 @@ import type {
 } from "../backend.d.ts";
 import { useActor } from "../hooks/useActor";
 import { clearAuthUser, getAuthUser } from "../utils/auth";
+import { getVideoObjectURLWithFallback } from "../utils/videoDB";
 
 function StatCard({
   icon: Icon,
@@ -282,16 +283,22 @@ export function AdminDashboardPage() {
     refetchInterval: 1000 * 30,
   });
 
+  // Extended submission type that includes MCQ score for display
+  interface PracticalSubmissionWithScore extends PracticalVideoSubmission {
+    mcqScore: number;
+    videoSrc: string; // resolved video source (may differ from videoDataURI if loaded from IndexedDB)
+  }
+
   // Practical Video Submissions — also check localStorage for pending videos
   const {
     data: practicalVideos = [],
     isLoading: practicalLoading,
     refetch: refetchPractical,
-  } = useQuery<PracticalVideoSubmission[]>({
+  } = useQuery<PracticalSubmissionWithScore[]>({
     queryKey: ["admin-practical-videos"],
     queryFn: async () => {
       // Check localStorage for ALL practical video submissions (pending + approved + rejected)
-      const localSubs: PracticalVideoSubmission[] = [];
+      const localSubs: PracticalSubmissionWithScore[] = [];
       try {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -300,18 +307,64 @@ export function AdminDashboardPage() {
             if (!raw) continue;
             try {
               const sub = JSON.parse(raw);
+              const workerIdStr = String(sub.workerId ?? "");
+
+              // Read MCQ score from localStorage
+              const mcqRaw = localStorage.getItem(
+                `knot_cert_mcq_${workerIdStr}`,
+              );
+              const mcqScore = mcqRaw ? Number.parseInt(mcqRaw, 10) || 0 : 0;
+
+              // Only show submissions where MCQ was passed (6+)
+              // If mcqScore is 0/unknown (backward compat), still show
+              if (mcqScore > 0 && mcqScore < 6) continue;
+
+              // Resolve video source with multi-layer fallback:
+              // 1. base64 stored in practical submission (videoDataURI)
+              // 2. base64 stored at registration time (knot_video_b64_<id>)
+              // 3. IndexedDB blob saved under "practical_<id>" key (from test submission)
+              // 4. IndexedDB blob saved under "<id>" key (from registration)
+              let videoSrc = sub.videoDataURI ?? "";
+              if (!videoSrc || videoSrc.length < 10) {
+                // Try registration-time base64 backup
+                const regB64 = localStorage.getItem(
+                  `knot_video_b64_${workerIdStr}`,
+                );
+                if (regB64 && regB64.length > 10) {
+                  videoSrc = regB64;
+                } else {
+                  // Try IndexedDB: practical key first, then registration key
+                  try {
+                    const practicalIdxUrl = await getVideoObjectURLWithFallback(
+                      `practical_${workerIdStr}`,
+                    );
+                    if (practicalIdxUrl) {
+                      videoSrc = practicalIdxUrl;
+                    } else {
+                      const regIdxUrl =
+                        await getVideoObjectURLWithFallback(workerIdStr);
+                      if (regIdxUrl) videoSrc = regIdxUrl;
+                    }
+                  } catch {
+                    // All fallbacks exhausted
+                  }
+                }
+              }
+
               localSubs.push({
                 workerId: BigInt(sub.workerId ?? 0),
                 workerName: sub.workerName ?? "Unknown",
                 skill: sub.skill ?? "—",
                 videoDataURI: sub.videoDataURI ?? "",
+                videoSrc,
+                mcqScore,
                 submittedAt: BigInt(
                   sub.submittedAt
                     ? sub.submittedAt * 1_000_000
                     : Date.now() * 1_000_000,
                 ),
                 status: sub.status ?? "pending",
-              } as PracticalVideoSubmission);
+              } as PracticalSubmissionWithScore);
             } catch {
               /**/
             }
@@ -321,13 +374,42 @@ export function AdminDashboardPage() {
         /**/
       }
 
-      // Also check backend for pending submissions
+      // Also check backend for pending submissions (without MCQ filter since backend may not have score)
       if (!actor) return localSubs;
       try {
         const backendSubs = await actor.getPendingPracticalVideos();
         const localIds = new Set(localSubs.map((s) => s.workerId.toString()));
-        const backendOnly = backendSubs.filter(
-          (s) => !localIds.has(s.workerId.toString()),
+        const backendOnly: PracticalSubmissionWithScore[] = await Promise.all(
+          backendSubs
+            .filter((s) => !localIds.has(s.workerId.toString()))
+            .map(async (s) => {
+              const wIdStr = s.workerId.toString();
+              const mcqRaw = localStorage.getItem(`knot_cert_mcq_${wIdStr}`);
+              const mcqScore = mcqRaw ? Number.parseInt(mcqRaw, 10) || 0 : 0;
+              let videoSrc = s.videoDataURI ?? "";
+              if (!videoSrc || videoSrc.length < 10) {
+                const regB64 = localStorage.getItem(`knot_video_b64_${wIdStr}`);
+                if (regB64 && regB64.length > 10) {
+                  videoSrc = regB64;
+                } else {
+                  try {
+                    const practicalIdxUrl = await getVideoObjectURLWithFallback(
+                      `practical_${wIdStr}`,
+                    );
+                    if (practicalIdxUrl) {
+                      videoSrc = practicalIdxUrl;
+                    } else {
+                      const regIdxUrl =
+                        await getVideoObjectURLWithFallback(wIdStr);
+                      if (regIdxUrl) videoSrc = regIdxUrl;
+                    }
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              }
+              return { ...s, mcqScore, videoSrc };
+            }),
         );
         return [...localSubs, ...backendOnly];
       } catch {
@@ -348,44 +430,65 @@ export function AdminDashboardPage() {
     queryFn: async () => {
       const results: Array<CertificationResult & { workerName: string }> = [];
 
-      // Check localStorage certs first
+      // Check localStorage certs first — only include admin-approved workers
       for (const w of workers) {
         const wIdStr = w.id.toString();
         const certStatus = localStorage.getItem(`knot_cert_status_${wIdStr}`);
         const certRaw = localStorage.getItem(`knot_cert_${wIdStr}`);
+        // Strict check: only "approved" by admin qualifies for the Certified tab
+        if (certStatus !== "approved") continue;
         if (certRaw) {
           try {
             const parsed = JSON.parse(certRaw);
-            const isApproved =
-              certStatus === "approved" || parsed.practicalPassed === true;
             results.push({
               workerId: w.id,
               skill: parsed.skill ?? w.skill,
               level: parsed.level ?? "Basic",
-              passed: isApproved,
+              passed: true,
               issuedDate: BigInt(parsed.issuedDate ?? 0),
               certificateId: parsed.certificateId ?? "",
               mcqScore: BigInt(parsed.mcqScore ?? 0),
-              practicalPassed: isApproved,
+              practicalPassed: true,
               workerName: parsed.workerName ?? w.name,
             });
           } catch {
             /**/
           }
+        } else {
+          // certStatus === "approved" but no cert record — add minimal entry
+          results.push({
+            workerId: w.id,
+            skill: w.skill,
+            level: "Basic",
+            passed: true,
+            issuedDate: BigInt(0),
+            certificateId: "",
+            mcqScore: BigInt(0),
+            practicalPassed: true,
+            workerName: w.name,
+          });
         }
       }
 
       if (!actor || workers.length === 0) return results;
 
       // Supplement with backend certs for workers not already in results
+      // Only include workers that have been admin-approved (certStatus === 'approved')
       const localWorkerIds = new Set(results.map((r) => r.workerId.toString()));
       const backendResults = await Promise.all(
         workers
-          .filter((w) => !localWorkerIds.has(w.id.toString()))
+          .filter((w) => {
+            if (localWorkerIds.has(w.id.toString())) return false;
+            // Only include if admin approved
+            const certStatus = localStorage.getItem(
+              `knot_cert_status_${w.id.toString()}`,
+            );
+            return certStatus === "approved";
+          })
           .map(async (w) => {
             try {
               const cert = await actor.getCertification(w.id);
-              if (cert) return { ...cert, workerName: w.name };
+              if (cert?.passed) return { ...cert, workerName: w.name };
             } catch {
               /**/
             }
@@ -606,7 +709,7 @@ export function AdminDashboardPage() {
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg overflow-hidden ring-2 ring-amber-400/40 shrink-0">
                 <img
-                  src="/assets/uploads/image-14-1.png"
+                  src="/assets/uploads/image-27-4.png"
                   alt="KNOT"
                   className="w-full h-full object-cover"
                 />
@@ -763,7 +866,7 @@ export function AdminDashboardPage() {
               className="font-body text-sm data-[state=active]:bg-amber-600 data-[state=active]:text-white text-slate-400 rounded-lg transition-all"
             >
               <Award className="w-4 h-4 mr-1.5" />
-              Certified ({certs.filter((c) => c.practicalPassed).length})
+              Certified ({certs.length})
             </TabsTrigger>
             <TabsTrigger
               value="practical"
@@ -1033,7 +1136,7 @@ export function AdminDashboardPage() {
                   >
                     Loading certified workers…
                   </div>
-                ) : certs.filter((c) => c.practicalPassed).length === 0 ? (
+                ) : certs.length === 0 ? (
                   <div
                     data-ocid="admin.certs.empty_state"
                     className="py-12 text-center text-slate-400 font-body text-sm"
@@ -1071,42 +1174,40 @@ export function AdminDashboardPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {certs
-                          .filter((c) => c.practicalPassed)
-                          .map((cert, idx) => (
-                            <TableRow
-                              key={cert.certificateId || idx}
-                              data-ocid={`admin.certs.item.${idx + 1}`}
-                              className="border-slate-700 hover:bg-slate-700/40 transition-colors"
-                            >
-                              <TableCell className="text-slate-500 font-mono text-xs">
-                                {idx + 1}
-                              </TableCell>
-                              <TableCell className="text-white font-body font-medium text-sm">
-                                {cert.workerName}
-                              </TableCell>
-                              <TableCell className="text-slate-300 font-body text-sm">
-                                {cert.skill}
-                              </TableCell>
-                              <TableCell className="text-amber-400 font-body text-sm font-semibold">
-                                {cert.level || "Basic"}
-                              </TableCell>
-                              <TableCell className="text-slate-300 font-body text-sm">
-                                {Number(cert.mcqScore)} / 9
-                              </TableCell>
-                              <TableCell className="text-slate-500 font-body text-xs whitespace-nowrap">
-                                {formatTimestamp(cert.issuedDate)}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1.5 text-green-400">
-                                  <CheckCircle className="w-4 h-4" />
-                                  <span className="font-body text-xs font-semibold">
-                                    Certified
-                                  </span>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                        {certs.map((cert, idx) => (
+                          <TableRow
+                            key={cert.certificateId || idx}
+                            data-ocid={`admin.certs.item.${idx + 1}`}
+                            className="border-slate-700 hover:bg-slate-700/40 transition-colors"
+                          >
+                            <TableCell className="text-slate-500 font-mono text-xs">
+                              {idx + 1}
+                            </TableCell>
+                            <TableCell className="text-white font-body font-medium text-sm">
+                              {cert.workerName}
+                            </TableCell>
+                            <TableCell className="text-slate-300 font-body text-sm">
+                              {cert.skill}
+                            </TableCell>
+                            <TableCell className="text-amber-400 font-body text-sm font-semibold">
+                              {cert.level || "Basic"}
+                            </TableCell>
+                            <TableCell className="text-slate-300 font-body text-sm">
+                              {Number(cert.mcqScore)} / 9
+                            </TableCell>
+                            <TableCell className="text-slate-500 font-body text-xs whitespace-nowrap">
+                              {formatTimestamp(cert.issuedDate)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5 text-green-400">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="font-body text-xs font-semibold">
+                                  Certified
+                                </span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -1148,39 +1249,53 @@ export function AdminDashboardPage() {
                         className="bg-slate-700/50 rounded-xl border border-slate-600 overflow-hidden"
                       >
                         {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-600">
-                          <div>
+                        <div className="flex items-start justify-between px-4 py-3 border-b border-slate-600 gap-3">
+                          <div className="min-w-0">
                             <p className="font-body font-semibold text-white text-sm">
                               {submission.workerName}
                             </p>
                             <p className="font-body text-xs text-slate-400 mt-0.5">
-                              Skill: {submission.skill} · Submitted:{" "}
+                              Skill: {submission.skill}
+                            </p>
+                            <p className="font-body text-xs text-slate-500 mt-0.5">
+                              Submitted:{" "}
                               {formatTimestamp(submission.submittedAt)}
                             </p>
+                            {/* MCQ Score badge */}
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-body font-semibold border border-blue-500/30">
+                                📋 MCQ:{" "}
+                                {submission.mcqScore > 0
+                                  ? `${submission.mcqScore}/9 ✓ Passed`
+                                  : "Score not recorded"}
+                              </span>
+                            </div>
                           </div>
-                          {submission.status === "approved" ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/20 text-green-300 text-xs font-body font-semibold border border-green-500/30">
-                              <CheckCircle className="w-3 h-3" />
-                              Approved
-                            </span>
-                          ) : submission.status === "rejected" ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-body font-semibold border border-red-500/30">
-                              <XCircle className="w-3 h-3" />
-                              Rejected
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 text-xs font-body font-semibold border border-orange-500/30">
-                              <Clock className="w-3 h-3" />
-                              Pending Review
-                            </span>
-                          )}
+                          <div className="shrink-0">
+                            {submission.status === "approved" ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/20 text-green-300 text-xs font-body font-semibold border border-green-500/30">
+                                <CheckCircle className="w-3 h-3" />
+                                Approved
+                              </span>
+                            ) : submission.status === "rejected" ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-body font-semibold border border-red-500/30">
+                                <XCircle className="w-3 h-3" />
+                                Rejected
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 text-xs font-body font-semibold border border-orange-500/30">
+                                <Clock className="w-3 h-3" />
+                                Pending Review
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        {/* Video player */}
-                        {submission.videoDataURI &&
-                        submission.videoDataURI.length > 10 ? (
+                        {/* Video player — use resolved videoSrc (IndexedDB or base64 URI) */}
+                        {submission.videoSrc &&
+                        submission.videoSrc.length > 10 ? (
                           <div className="bg-black aspect-video">
                             <video
-                              src={submission.videoDataURI}
+                              src={submission.videoSrc}
                               controls
                               className="w-full h-full object-contain"
                             >
@@ -1194,6 +1309,10 @@ export function AdminDashboardPage() {
                               <Video className="w-10 h-10 mx-auto mb-2 opacity-40" />
                               <p className="font-body text-sm">
                                 Video not available
+                              </p>
+                              <p className="font-body text-xs text-slate-600 mt-1">
+                                The video may be stored on the worker's device
+                                only
                               </p>
                             </div>
                           </div>

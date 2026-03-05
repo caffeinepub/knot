@@ -22,6 +22,7 @@ import {
   MapPin,
   Navigation,
   Phone,
+  PhoneCall,
   Play,
   Share2,
   Shield,
@@ -422,6 +423,33 @@ export function ProfilePage() {
                   <BookOpen className="w-4 h-4" />
                   {t("profile_request_learn")}
                 </Button>
+
+                {/* Book for Work button */}
+                {user.contact?.trim() ? (
+                  <a
+                    href={`tel:${user.contact.trim()}`}
+                    data-ocid="profile.book_for_work.button"
+                    className="w-full h-11 gap-2 bg-green-600 hover:bg-green-700 text-white font-body font-semibold inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    onClick={() => {
+                      // Fire notification to the worker
+                      addNotificationForUser(userId!.toString(), {
+                        type: "learning_request",
+                        message: `${authUser?.name ?? "Someone"} wants to book you for work`,
+                      });
+                    }}
+                  >
+                    <PhoneCall className="w-4 h-4 mr-2" />
+                    Book for Work — Call {user.contact}
+                  </a>
+                ) : (
+                  <Button
+                    disabled
+                    className="w-full h-11 gap-2 bg-muted text-muted-foreground font-body font-semibold cursor-not-allowed opacity-60"
+                  >
+                    <PhoneCall className="w-4 h-4" />
+                    Book for Work (No contact provided)
+                  </Button>
+                )}
 
                 {/* Certification status */}
                 {(() => {

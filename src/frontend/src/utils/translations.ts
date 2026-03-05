@@ -212,6 +212,22 @@ export interface Translations {
   cert_download: string;
   cert_no_cert: string;
   cert_go_dashboard: string;
+
+  // New keys
+  home_no_workers: string;
+  home_no_workers_desc: string;
+  action_retry: string;
+  search_try_different: string;
+  action_clear_search: string;
+  filter_within_km: string;
+  cert_awaiting_review: string;
+  cert_video_submitted_desc: string;
+  cert_practical_uploaded: string;
+  nav_my_certificate: string;
+  nav_admin_panel: string;
+  nav_language: string;
+  notif_clear_all: string;
+  footer_meet_team: string;
 }
 
 const en: Translations = {
@@ -422,6 +438,22 @@ const en: Translations = {
   cert_download: "Download Certificate",
   cert_no_cert: "No certification found",
   cert_go_dashboard: "Go to Dashboard",
+
+  home_no_workers: "No professionals registered yet",
+  home_no_workers_desc: "Workers who register on KNOT will appear here.",
+  action_retry: "Retry",
+  search_try_different: "Try a different name or skill name.",
+  action_clear_search: "Clear search",
+  filter_within_km: "within {n}km",
+  cert_awaiting_review: "Awaiting Admin Review",
+  cert_video_submitted_desc:
+    "Your practical video has been submitted. Admin will review and approve or reject.",
+  cert_practical_uploaded: "Uploaded",
+  nav_my_certificate: "My Certificate",
+  nav_admin_panel: "Admin Panel",
+  nav_language: "Language",
+  notif_clear_all: "Clear all",
+  footer_meet_team: "Meet the Team",
 };
 
 const te: Translations = {
@@ -627,6 +659,21 @@ const te: Translations = {
   cert_download: "సర్టిఫికెట్ డౌన్‌లోడ్ చేయండి",
   cert_no_cert: "సర్టిఫికేషన్ కనుగొనబడలేదు",
   cert_go_dashboard: "డాష్‌బోర్డ్‌కి వెళ్ళండి",
+
+  home_no_workers: "ఇంకా నిపుణులు నమోదు కాలేదు",
+  home_no_workers_desc: "KNOT లో నమోదు చేసుకున్న కార్మికులు ఇక్కడ కనిపిస్తారు.",
+  action_retry: "మళ్ళీ ప్రయత్నించండి",
+  search_try_different: "వేరే పేరు లేదా నైపుణ్యం వెతకండి.",
+  action_clear_search: "శోధన క్లియర్ చేయండి",
+  filter_within_km: "{n}కి.మీ లోపల",
+  cert_awaiting_review: "అడ్మిన్ సమీక్ష కోసం వేచి ఉంది",
+  cert_video_submitted_desc: "మీ ప్రాక్టికల్ వీడియో సమర్పించబడింది. అడ్మిన్ సమీక్షిస్తారు.",
+  cert_practical_uploaded: "అప్‌లోడ్ చేయబడింది",
+  nav_my_certificate: "నా సర్టిఫికెట్",
+  nav_admin_panel: "అడ్మిన్ పేనల్",
+  nav_language: "భాష",
+  notif_clear_all: "అన్నీ క్లియర్ చేయి",
+  footer_meet_team: "మా టీమ్",
 };
 
 const hi: Translations = {
@@ -834,6 +881,22 @@ const hi: Translations = {
   cert_download: "सर्टिफिकेट डाउनलोड करें",
   cert_no_cert: "कोई सर्टिफिकेशन नहीं मिली",
   cert_go_dashboard: "डैशबोर्ड पर जाएं",
+
+  home_no_workers: "अभी तक कोई पेशेवर पंजीकृत नहीं",
+  home_no_workers_desc: "KNOT पर पंजीकृत कारीगर यहां दिखाई देंगे।",
+  action_retry: "पुनः प्रयास करें",
+  search_try_different: "कोई अन्य नाम या कौशल खोजें।",
+  action_clear_search: "खोज साफ करें",
+  filter_within_km: "{n}किमी के भीतर",
+  cert_awaiting_review: "एडमिन समीक्षा की प्रतीक्षा",
+  cert_video_submitted_desc:
+    "आपका प्रायोगिक वीडियो सबमिट हो गया। एडमिन समीक्षा करेंगे।",
+  cert_practical_uploaded: "अपलोड हो गया",
+  nav_my_certificate: "मेरा सर्टिफिकेट",
+  nav_admin_panel: "एडमिन पैनल",
+  nav_language: "भाषा",
+  notif_clear_all: "सभी हटाएं",
+  footer_meet_team: "हमारी टीम",
 };
 
 const ml: Translations = {
@@ -1040,6 +1103,22 @@ const ml: Translations = {
   cert_download: "സർട്ടിഫിക്കറ്റ് ഡൗൺലോഡ് ചെയ്യൂ",
   cert_no_cert: "സർട്ടിഫിക്കേഷൻ കണ്ടെത്തിയില്ല",
   cert_go_dashboard: "ഡാഷ്‌ബോർഡിലേക്ക് പോകൂ",
+
+  home_no_workers: "ഇതുവരെ ആരും രജിസ്റ്റർ ചെയ്തിട്ടില്ല",
+  home_no_workers_desc: "KNOT-ൽ രജിസ്റ്റർ ചെയ്ത തൊഴിലാളികൾ ഇവിടെ കാണും.",
+  action_retry: "വീണ്ടും ശ്രമിക്കൂ",
+  search_try_different: "മറ്റൊരു പേര് അല്ലെങ്കിൽ കഴിവ് തിരയൂ.",
+  action_clear_search: "തിരയൽ മായ്ക്കൂ",
+  filter_within_km: "{n}കി.മീ ഉള്ളിൽ",
+  cert_awaiting_review: "അഡ്മിൻ അവലോകനത്തിനായി കാത്തിരിക്കുന്നു",
+  cert_video_submitted_desc:
+    "നിങ്ങളുടെ പ്രായോഗിക വീഡിയോ സമർപ്പിച്ചു. അഡ്മിൻ അവലോകനം ചെയ്യും.",
+  cert_practical_uploaded: "അപ്‌ലോഡ് ചെയ്തു",
+  nav_my_certificate: "എന്റെ സർട്ടിഫിക്കറ്റ്",
+  nav_admin_panel: "അഡ്മിൻ പാനൽ",
+  nav_language: "ഭാഷ",
+  notif_clear_all: "എല്ലാം മായ്ക്കൂ",
+  footer_meet_team: "ഞങ്ങളുടെ ടീം",
 };
 
 const kn: Translations = {
@@ -1245,6 +1324,21 @@ const kn: Translations = {
   cert_download: "ಸರ್ಟಿಫಿಕೆಟ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
   cert_no_cert: "ಸರ್ಟಿಫಿಕೇಶನ್ ಕಂಡುಬಂದಿಲ್ಲ",
   cert_go_dashboard: "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್‌ಗೆ ಹೋಗಿ",
+
+  home_no_workers: "ಇನ್ನೂ ಯಾರೂ ನೋಂದಾಯಿಸಿಲ್ಲ",
+  home_no_workers_desc: "KNOT ನಲ್ಲಿ ನೋಂದಾಯಿಸಿದ ಕಾರ್ಮಿಕರು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತಾರೆ.",
+  action_retry: "ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+  search_try_different: "ಬೇರೆ ಹೆಸರು ಅಥವಾ ಕೌಶಲ್ಯ ಹುಡುಕಿ.",
+  action_clear_search: "ಹುಡುಕಾಟ ಅಳಿಸಿ",
+  filter_within_km: "{n}ಕಿ.ಮೀ ಒಳಗೆ",
+  cert_awaiting_review: "ಅಡ್ಮಿನ್ ಪರಿಶೀಲನೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
+  cert_video_submitted_desc: "ನಿಮ್ಮ ಪ್ರಾಯೋಗಿಕ ವೀಡಿಯೊ ಸಲ್ಲಿಸಲಾಗಿದೆ. ಅಡ್ಮಿನ್ ಪರಿಶೀಲಿಸುತ್ತಾರೆ.",
+  cert_practical_uploaded: "ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ",
+  nav_my_certificate: "ನನ್ನ ಪ್ರಮಾಣಪತ್ರ",
+  nav_admin_panel: "ಅಡ್ಮಿನ್ ಪ್ಯಾನಲ್",
+  nav_language: "ಭಾಷೆ",
+  notif_clear_all: "ಎಲ್ಲವನ್ನೂ ತೆರವುಗೊಳಿಸಿ",
+  footer_meet_team: "ನಮ್ಮ ತಂಡ",
 };
 
 export const TRANSLATIONS: Record<LangCode, Translations> = {

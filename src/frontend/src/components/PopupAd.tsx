@@ -3,11 +3,24 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 // ── Google AdSense Configuration ─────────────────────────────────────────────
-// TO EARN REAL REVENUE:
-// 1. Sign up at https://adsense.google.com
-// 2. Get approved (takes 1-3 days)
-// 3. Replace ADSENSE_CLIENT with your actual publisher ID (e.g. "ca-pub-1234567890123456")
-// 4. Replace BANNER_AD_SLOT and POPUP_AD_SLOT with your actual ad unit IDs
+//
+// HOW TO ENABLE REAL ADS AND EARN REVENUE:
+//
+// STEP 1: Go to https://adsense.google.com and sign up with your Google account
+// STEP 2: Add your website domain (e.g. knot-app.your-domain.com) and wait for verification
+// STEP 3: Once approved, go to AdSense dashboard → Your Publisher ID (looks like: ca-pub-1234567890123456)
+// STEP 4: Create two ad units in AdSense:
+//           - Banner ad unit (horizontal, 728x90 or responsive)
+//           - Rectangle ad unit (300x250 for popup)
+//         Each unit gives you a slot ID (e.g. 1234567890)
+// STEP 5: Replace the three values below with your real IDs:
+//           ADSENSE_CLIENT  → your Publisher ID  (e.g. "ca-pub-1234567890123456")
+//           BANNER_AD_SLOT  → your banner ad unit ID
+//           POPUP_AD_SLOT   → your rectangle ad unit ID
+//
+// Once these are set, real ads from Google's network will replace the demo placeholders
+// and you will earn revenue for every impression and click.
+//
 const ADSENSE_CLIENT = "ca-pub-XXXXXXXXXXXXXXXX";
 const BANNER_AD_SLOT = "1234567890"; // Replace with your banner ad unit ID
 const POPUP_AD_SLOT = "0987654321"; // Replace with your popup ad unit ID
@@ -203,13 +216,19 @@ export function BannerAd({ className = "" }: { className?: string }) {
               {ad.cta}
             </div>
           </div>
+          {/* Demo label — only shown until real AdSense is configured */}
+          <div className="px-3 py-1 bg-black/50 text-center">
+            <p className="font-body text-[9px] text-white/40 tracking-wide">
+              Demo ad · Configure AdSense (see PopupAd.tsx) to earn real revenue
+            </p>
+          </div>
         </a>
       )}
     </div>
   );
 }
 
-// ── Popup Ad (bottom-right, appears after 10s) ────────────────────────────────
+// ── Popup Ad (bottom-right, appears after 8s) ────────────────────────────────
 
 export function PopupAd() {
   const [visible, setVisible] = useState(false);
@@ -224,22 +243,22 @@ export function PopupAd() {
     loadAdSenseScript();
   }, []);
 
-  // Show after 10 seconds
+  // Show after 8 seconds
   useEffect(() => {
     const t = setTimeout(() => {
       if (!dismissed) setVisible(true);
-    }, 10000);
+    }, 8000);
     return () => clearTimeout(t);
   }, [dismissed]);
 
-  // Re-show every 3 minutes
+  // Re-show every 2 minutes
   useEffect(() => {
     if (dismissed) {
       const t = setTimeout(
         () => {
           setDismissed(false);
         },
-        3 * 60 * 1000,
+        2 * 60 * 1000,
       );
       return () => clearTimeout(t);
     }
@@ -361,6 +380,10 @@ export function PopupAd() {
                 >
                   No thanks, close ad
                 </button>
+                {/* Demo label — only shown until real AdSense is configured */}
+                <p className="font-body text-[9px] text-white/25 tracking-wide">
+                  Demo ad · Configure AdSense to earn real revenue
+                </p>
               </div>
             </div>
           )}

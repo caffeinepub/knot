@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CertificationResult, LearningRequest } from "../backend.d.ts";
+import { PopupAd } from "../components/PopupAd";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { getAuthUser } from "../utils/auth";
@@ -253,6 +254,7 @@ export function WorkerDashboardPage() {
 
   return (
     <main className="flex-1 bg-background">
+      <PopupAd />
       {/* Dashboard Header */}
       <div className="bg-navy py-8 px-4">
         <div className="container mx-auto">
@@ -361,19 +363,18 @@ export function WorkerDashboardPage() {
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <p className="font-display font-bold text-base text-blue-800">
-                        Awaiting Admin Review
+                        {t("cert_awaiting_review")}
                       </p>
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-200 text-blue-800 text-xs font-body font-semibold">
-                        ⏳ Pending
+                        ⏳ {t("dashboard_pending")}
                       </span>
                     </div>
                     <p className="font-body text-sm text-blue-700">
-                      Your practical video has been submitted. Admin will review
-                      and approve or reject.
+                      {t("cert_video_submitted_desc")}
                     </p>
                     {certMcqLS && (
                       <p className="font-body text-xs text-blue-600 mt-0.5">
-                        MCQ Score: {certMcqLS}/9
+                        {t("cert_score_label")}: {certMcqLS}/9
                       </p>
                     )}
                   </div>

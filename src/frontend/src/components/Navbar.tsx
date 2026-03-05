@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 // Note: Users is still used in notification icons
 import { useState } from "react";
-import logoImg from "/assets/uploads/image-14-1.png";
+import logoImg from "/assets/uploads/image-27-4.png";
 import { useLang } from "../contexts/LanguageContext";
 import { useNotifications } from "../contexts/NotificationsContext";
 import type { NotificationType } from "../contexts/NotificationsContext";
@@ -180,7 +180,7 @@ export function Navbar() {
                           onClick={clearAll}
                           className="text-xs text-muted-foreground hover:text-destructive font-body hover:underline transition-colors"
                         >
-                          Clear all
+                          {t("notif_clear_all")}
                         </button>
                       )}
                     </div>
@@ -234,7 +234,7 @@ export function Navbar() {
                           onClick={clearAll}
                           className="flex-1 text-xs text-center text-muted-foreground hover:text-destructive font-body transition-colors"
                         >
-                          Clear all
+                          {t("notif_clear_all")}
                         </button>
                       </div>
                     </>
@@ -290,7 +290,7 @@ export function Navbar() {
                       }`}
                     >
                       <Shield className="w-4 h-4" />
-                      Admin Panel
+                      {t("nav_admin_panel")}
                     </Button>
                   </Link>
                 )}
@@ -321,7 +321,7 @@ export function Navbar() {
                       }`}
                     >
                       <Award className="w-4 h-4" />
-                      My Certificate
+                      {t("nav_my_certificate")}
                     </Button>
                   </Link>
                 )}
@@ -462,7 +462,7 @@ export function Navbar() {
               {/* Language switcher in mobile */}
               <div className="px-3 py-1 border-t border-white/10 mt-1 pt-3">
                 <p className="text-white/40 text-xs uppercase tracking-widest font-body mb-2 flex items-center gap-1">
-                  <Globe className="w-3 h-3" /> Language
+                  <Globe className="w-3 h-3" /> {t("nav_language")}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {LANGUAGE_OPTIONS.map((opt) => (
@@ -496,7 +496,7 @@ export function Navbar() {
                       className="flex items-center gap-2 px-3 py-2 rounded-lg text-amber-300 hover:text-amber-200 hover:bg-white/10 transition-colors font-body font-semibold"
                     >
                       <Shield className="w-4 h-4" />
-                      Admin Panel
+                      {t("nav_admin_panel")}
                     </Link>
                   )}
                   {authUser.role === "worker" && (
@@ -516,7 +516,7 @@ export function Navbar() {
                       className="flex items-center gap-2 px-3 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors font-body"
                     >
                       <Award className="w-4 h-4" />
-                      My Certificate
+                      {t("nav_my_certificate")}
                     </Link>
                   )}
                   <div className="px-3 py-2 border-t border-white/10 mt-1 pt-3">
@@ -559,7 +559,7 @@ export function Navbar() {
                   className="flex items-center gap-2 px-3 py-2 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-white/10 transition-colors font-body font-semibold"
                 >
                   <LogIn className="w-4 h-4" />
-                  {t("nav_login")} / Register
+                  {t("nav_login")}
                 </Link>
               )}
             </div>

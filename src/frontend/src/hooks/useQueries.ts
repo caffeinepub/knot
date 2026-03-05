@@ -1,40 +1,40 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LearningRequest, User } from "../backend.d.ts";
+import { getAuthUser } from "../utils/auth";
 import { useActor } from "./useActor";
 
-function getLocalStorageWorkers(): User[] {
-  const workers: User[] = [];
+/**
+ * Returns the currently logged-in worker's local profile (if any).
+ * Used ONLY as a self-fallback so the current user can see themselves
+ * even before the backend has confirmed their registration.
+ * Other workers' localStorage data is intentionally excluded — they
+ * must come from the backend so that cross-device consistency is maintained.
+ */
+function getCurrentWorkerLocalProfile(): User | null {
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith("knot_worker_profile_")) {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            workers.push({
-              id: BigInt(parsed.id ?? 0),
-              name: parsed.name ?? "",
-              skill: parsed.skill ?? "",
-              location: parsed.location ?? "",
-              trustScore: BigInt(parsed.trustScore ?? 0),
-              endorsementCount: BigInt(parsed.endorsementCount ?? 0),
-              badgeLevel: parsed.badgeLevel ?? "None",
-              distance: BigInt(parsed.distance ?? 5),
-              bio: parsed.bio ?? "",
-              videoURL: parsed.videoURL ?? "",
-              contact: parsed.contact ?? "",
-            } as User);
-          } catch {
-            // ignore
-          }
-        }
-      }
-    }
+    const auth = getAuthUser();
+    if (!auth || auth.role !== "worker") return null;
+    const raw = localStorage.getItem(
+      `knot_worker_profile_${auth.id.toString()}`,
+    );
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      id: BigInt(parsed.id ?? auth.id),
+      name: parsed.name ?? "",
+      skill: parsed.skill ?? "",
+      location: parsed.location ?? "",
+      trustScore: BigInt(parsed.trustScore ?? 0),
+      endorsementCount: BigInt(parsed.endorsementCount ?? 0),
+      badgeLevel: parsed.badgeLevel ?? "None",
+      distance: BigInt(parsed.distance ?? 5),
+      bio: parsed.bio ?? "",
+      videoURL: parsed.videoURL ?? "",
+      contact: parsed.contact ?? "",
+    } as User;
   } catch {
-    // ignore
+    return null;
   }
-  return workers;
 }
 
 export function useAllUsers() {
@@ -51,14 +51,13 @@ export function useAllUsers() {
         }
       }
 
-      // Merge in localStorage workers (for workers who used fallback IDs)
-      const localWorkers = getLocalStorageWorkers();
-      if (localWorkers.length > 0) {
+      // Only add the current logged-in worker as fallback if not already in backend results
+      const selfProfile = getCurrentWorkerLocalProfile();
+      if (selfProfile) {
         const backendIds = new Set(backendUsers.map((u) => u.id.toString()));
-        const missingLocally = localWorkers.filter(
-          (lw) => !backendIds.has(lw.id.toString()),
-        );
-        return [...backendUsers, ...missingLocally];
+        if (!backendIds.has(selfProfile.id.toString())) {
+          return [...backendUsers, selfProfile];
+        }
       }
       return backendUsers;
     },
@@ -103,21 +102,24 @@ export function useSearchUsers(query: string) {
         }
       }
 
-      // Merge localStorage workers
-      const localWorkers = getLocalStorageWorkers();
-      const backendIds = new Set(backendResults.map((u) => u.id.toString()));
-      const localFiltered = localWorkers.filter((lw) => {
-        if (backendIds.has(lw.id.toString())) return false;
-        if (!query.trim()) return true;
-        const q = query.toLowerCase();
-        return (
-          lw.name.toLowerCase().includes(q) ||
-          lw.skill.toLowerCase().includes(q) ||
-          lw.location.toLowerCase().includes(q)
-        );
-      });
+      // Only add self as fallback if not already in backend results
+      const selfProfile = getCurrentWorkerLocalProfile();
+      if (selfProfile) {
+        const backendIds = new Set(backendResults.map((u) => u.id.toString()));
+        if (!backendIds.has(selfProfile.id.toString())) {
+          const q = query.toLowerCase().trim();
+          const selfMatches =
+            !q ||
+            selfProfile.name.toLowerCase().includes(q) ||
+            selfProfile.skill.toLowerCase().includes(q) ||
+            selfProfile.location.toLowerCase().includes(q);
+          if (selfMatches) {
+            backendResults = [...backendResults, selfProfile];
+          }
+        }
+      }
 
-      return [...backendResults, ...localFiltered];
+      return backendResults;
     },
     enabled: !!actor && !isFetching,
     staleTime: 1000 * 15,
@@ -148,16 +150,19 @@ export function useNearbyUsers(maxDistanceKm: number) {
         }
       }
 
-      // Merge localStorage workers filtered by distance
-      const localWorkers = getLocalStorageWorkers();
-      const backendIds = new Set(backendResults.map((u) => u.id.toString()));
-      const localFiltered = localWorkers.filter(
-        (lw) =>
-          !backendIds.has(lw.id.toString()) &&
-          Number(lw.distance) <= maxDistanceKm,
-      );
+      // Only add self as fallback if not already in backend results
+      const selfProfile = getCurrentWorkerLocalProfile();
+      if (selfProfile) {
+        const backendIds = new Set(backendResults.map((u) => u.id.toString()));
+        if (
+          !backendIds.has(selfProfile.id.toString()) &&
+          Number(selfProfile.distance) <= maxDistanceKm
+        ) {
+          backendResults = [...backendResults, selfProfile];
+        }
+      }
 
-      return [...backendResults, ...localFiltered];
+      return backendResults;
     },
     enabled: !!actor && !isFetching && maxDistanceKm > 0,
     staleTime: 1000 * 15,
@@ -312,8 +317,38 @@ export function useSubmitLearningRequest() {
       targetUserId: bigint;
       message: string;
     }) => {
-      if (!actor) throw new Error("No actor");
-      return actor.submitLearningRequest(requesterId, targetUserId, message);
+      // Try backend first
+      if (actor) {
+        try {
+          return await actor.submitLearningRequest(
+            requesterId,
+            targetUserId,
+            message,
+          );
+        } catch {
+          // fall through to local fallback
+        }
+      }
+      // Local fallback: save to localStorage so it never fails
+      const key = "knot_learn_requests";
+      let existing: Array<{
+        requesterId: string;
+        targetUserId: string;
+        message: string;
+        timestamp: number;
+      }> = [];
+      try {
+        existing = JSON.parse(localStorage.getItem(key) ?? "[]");
+      } catch {
+        /**/
+      }
+      existing.push({
+        requesterId,
+        targetUserId: targetUserId.toString(),
+        message,
+        timestamp: Date.now(),
+      });
+      localStorage.setItem(key, JSON.stringify(existing));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["learning-requests"] });

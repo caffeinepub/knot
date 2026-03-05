@@ -21,6 +21,7 @@ import { BannerAd, PopupAd } from "../components/PopupAd";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { getAuthUser } from "../utils/auth";
+import { saveVideoBlob } from "../utils/videoDB";
 
 // ─── Text-to-Speech ─────────────────────────────────────────────────────────
 
@@ -1236,9 +1237,16 @@ export function CertificationTestPage() {
       localStorage.setItem(`knot_cert_status_${workerIdStr}`, "pending_review");
       localStorage.setItem(`knot_cert_mcq_${workerIdStr}`, mcqScore.toString());
 
-      // Save practical submission to localStorage so the admin panel can find it
+      // Save practical submission so the admin panel can find it
+      // 1. Always save to IndexedDB first (no size limit)
+      try {
+        await saveVideoBlob(`practical_${workerIdStr}`, practicalFile!);
+      } catch {
+        // IndexedDB save failed — fall through to base64
+      }
       try {
         const base64ForAdmin = await readFileAsBase64(practicalFile!);
+        // 2. Try to save base64 to localStorage (may fail for large files >5MB)
         const practicalSubmission = {
           workerId: workerIdStr,
           workerName: authUser.name,
@@ -1247,12 +1255,49 @@ export function CertificationTestPage() {
           status: "pending",
           submittedAt: Date.now(),
         };
+        try {
+          localStorage.setItem(
+            `knot_practical_submission_${workerIdStr}`,
+            JSON.stringify(practicalSubmission),
+          );
+        } catch {
+          // localStorage quota exceeded — save without base64 so key still exists
+          const practicalSubmissionNoVideo = {
+            workerId: workerIdStr,
+            workerName: authUser.name,
+            skill,
+            videoDataURI: "",
+            status: "pending",
+            submittedAt: Date.now(),
+          };
+          localStorage.setItem(
+            `knot_practical_submission_${workerIdStr}`,
+            JSON.stringify(practicalSubmissionNoVideo),
+          );
+          // Also save the base64 under the video key separately for admin fallback
+          try {
+            localStorage.setItem(
+              `knot_video_b64_${workerIdStr}`,
+              base64ForAdmin,
+            );
+          } catch {
+            /* localStorage full, video stays in IndexedDB only */
+          }
+        }
+      } catch {
+        // base64 conversion failed — save minimal submission record
+        const practicalSubmissionMinimal = {
+          workerId: workerIdStr,
+          workerName: authUser.name,
+          skill,
+          videoDataURI: "",
+          status: "pending",
+          submittedAt: Date.now(),
+        };
         localStorage.setItem(
           `knot_practical_submission_${workerIdStr}`,
-          JSON.stringify(practicalSubmission),
+          JSON.stringify(practicalSubmissionMinimal),
         );
-      } catch {
-        // Continue even if the base64 conversion fails (large files)
       }
       // Save cert data as pending (not passed yet)
       localStorage.setItem(
@@ -1905,11 +1950,13 @@ export function CertificationTestPage() {
                           {t("cert_practical_label")}
                         </p>
                         <p
-                          className={`font-display font-bold text-xl ${result.practicalPassed ? "text-green-600" : "text-orange-500"}`}
+                          className={`font-display font-bold text-xl ${result.practicalPassed && result.mcqScore >= 6 ? "text-green-600" : result.practicalPassed ? "text-blue-500" : "text-orange-500"}`}
                         >
-                          {result.practicalPassed
+                          {result.practicalPassed && result.mcqScore >= 6
                             ? t("cert_practical_accepted")
-                            : t("cert_failed")}
+                            : result.practicalPassed
+                              ? t("cert_practical_uploaded")
+                              : t("cert_failed")}
                         </p>
                       </div>
                     </div>

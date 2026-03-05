@@ -168,8 +168,8 @@ export function VoiceSearch({
           isListening
             ? "bg-accent text-accent-foreground animate-mic-pulse"
             : isSupported
-              ? "border-border hover:bg-accent/10"
-              : "border-border opacity-60 hover:bg-accent/10"
+              ? "border-border hover:bg-muted hover:border-foreground/30 hover:text-foreground"
+              : "border-border opacity-60 hover:bg-muted"
         }`}
         aria-label={isListening ? "Stop listening" : "Voice search"}
         title={

@@ -19,15 +19,17 @@ import {
   EyeOff,
   Loader2,
   Lock,
+  LogIn,
   MapPin,
   Phone,
   Shield,
   Upload,
   User,
+  UserPlus,
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
-import logoImg from "/assets/uploads/image-14-1.png";
+import logoImg from "/assets/uploads/image-27-4.png";
 import { useLang } from "../contexts/LanguageContext";
 import { useActor } from "../hooks/useActor";
 import { setAuthUser } from "../utils/auth";
@@ -43,6 +45,10 @@ export function LoginPage() {
   useEffect(() => {
     actorRef.current = actor;
   }, [actor]);
+
+  // Mode toggles: "login" = returning user, "register" = new user
+  const [citizenMode, setCitizenMode] = useState<"login" | "register">("login");
+  const [workerMode, setWorkerMode] = useState<"login" | "register">("login");
 
   // Citizen state
   const [citizenName, setCitizenName] = useState("");
@@ -91,7 +97,99 @@ export function LoginPage() {
     return actorRef.current;
   }
 
-  async function handleCitizenSubmit(e: React.FormEvent) {
+  // ─── Citizen Login (returning user — username + password only) ───────────────
+  async function handleCitizenLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setCitizenPasswordError("");
+    if (!citizenUsername.trim() || !citizenPassword.trim()) {
+      toast.error("Please enter your username and password.");
+      return;
+    }
+    setCitizenLoading(true);
+
+    const username = citizenUsername.trim().toLowerCase();
+    const passwordHash = await sha256Hex(citizenPassword);
+
+    let userId: bigint | null = null;
+    let name = "";
+
+    // 1. Try backend login
+    const currentActor = await waitForActor();
+    if (currentActor) {
+      try {
+        const existing = await currentActor.loginCitizen(
+          username,
+          passwordHash,
+        );
+        if (existing !== null && existing !== undefined) {
+          userId = existing.id;
+          name = existing.name;
+        }
+      } catch (err) {
+        console.warn("Citizen backend login failed:", err);
+      }
+    }
+
+    // 2. Fallback: localStorage credentials
+    if (!userId) {
+      const localCitizen = localStorage.getItem(
+        `knot_citizen_username_${username}`,
+      );
+      if (localCitizen) {
+        try {
+          const lc = JSON.parse(localCitizen);
+          if (lc.passwordHash === passwordHash) {
+            userId = BigInt(lc.id);
+            // Load name from saved profile
+            const profile = localStorage.getItem(
+              `knot_citizen_profile_${lc.id}`,
+            );
+            if (profile) {
+              const p = JSON.parse(profile);
+              name = p.name ?? "";
+            }
+          } else {
+            setCitizenPasswordError("Username or password is incorrect.");
+            setCitizenLoading(false);
+            return;
+          }
+        } catch {
+          /**/
+        }
+      }
+    }
+
+    if (!userId) {
+      setCitizenPasswordError(
+        'Username or password is incorrect. Not registered? Click "New here? Register".',
+      );
+      setCitizenLoading(false);
+      return;
+    }
+
+    // Load full profile
+    const profile = localStorage.getItem(
+      `knot_citizen_profile_${userId.toString()}`,
+    );
+    let address = "";
+    if (profile) {
+      try {
+        const p = JSON.parse(profile);
+        address = p.address ?? "";
+        if (!name) name = p.name ?? "";
+      } catch {
+        /**/
+      }
+    }
+
+    setAuthUser({ role: "citizen", id: userId, name, username, address });
+    toast.success(`Welcome back, ${name || username}! 👋`);
+    setCitizenLoading(false);
+    navigate({ to: "/" });
+  }
+
+  // ─── Citizen Register (new user — all fields) ────────────────────────────────
+  async function handleCitizenRegister(e: React.FormEvent) {
     e.preventDefault();
     setCitizenPasswordError("");
     if (
@@ -120,25 +218,22 @@ export function LoginPage() {
     const currentActor = await waitForActor();
     if (currentActor) {
       try {
-        // Try login first (re-login flow)
         const existing = await currentActor.loginCitizen(
           username,
           passwordHash,
         );
         if (existing !== null && existing !== undefined) {
-          // Successful re-login
           userId = existing.id;
           isReturning = true;
         } else {
-          // Check if username already exists (wrong password)
           const byName = await currentActor.findCitizenByName(name);
           if (byName !== null && byName !== undefined) {
-            // User exists but password wrong
-            setCitizenPasswordError("Incorrect password. Please try again.");
+            setCitizenPasswordError(
+              "Username already taken. Try a different one.",
+            );
             setCitizenLoading(false);
             return;
           }
-          // Brand new registration
           userId = await currentActor.registerCitizen(
             name,
             address,
@@ -147,11 +242,11 @@ export function LoginPage() {
           );
         }
       } catch (err) {
-        console.warn("Citizen auth failed, using local fallback:", err);
+        console.warn("Citizen register failed, using local fallback:", err);
       }
     }
 
-    // Check localStorage for existing citizen account with same username
+    // Check localStorage for existing citizen with same username
     if (!isReturning && !userId) {
       const localCitizen = localStorage.getItem(
         `knot_citizen_username_${username}`,
@@ -159,12 +254,13 @@ export function LoginPage() {
       if (localCitizen) {
         try {
           const lc = JSON.parse(localCitizen);
-          // Verify password hash matches
           if (lc.passwordHash === passwordHash) {
             userId = BigInt(lc.id);
             isReturning = true;
           } else {
-            setCitizenPasswordError("Incorrect password. Please try again.");
+            setCitizenPasswordError(
+              "Username already taken. Please choose another.",
+            );
             setCitizenLoading(false);
             return;
           }
@@ -176,27 +272,19 @@ export function LoginPage() {
 
     const finalId = userId ?? BigInt(Date.now() % 1000000);
 
-    // Save to localStorage for admin panel visibility
     const citizenProfile = { id: finalId.toString(), name, username, address };
     localStorage.setItem(
       `knot_citizen_profile_${finalId.toString()}`,
       JSON.stringify(citizenProfile),
     );
     if (!isReturning) {
-      // Save credentials for future re-login
       localStorage.setItem(
         `knot_citizen_username_${username}`,
         JSON.stringify({ id: finalId.toString(), passwordHash }),
       );
     }
 
-    setAuthUser({
-      role: "citizen",
-      id: finalId,
-      name,
-      username,
-      address,
-    });
+    setAuthUser({ role: "citizen", id: finalId, name, username, address });
 
     if (isReturning) {
       toast.success(`Welcome back, ${name}! 👋`);
@@ -209,7 +297,109 @@ export function LoginPage() {
     navigate({ to: "/" });
   }
 
-  async function handleWorkerSubmit(e: React.FormEvent) {
+  // ─── Worker Login (returning user — username + password only) ────────────────
+  async function handleWorkerLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setWorkerPasswordError("");
+    if (!workerUsername.trim() || !workerPassword.trim()) {
+      toast.error("Please enter your username and password.");
+      return;
+    }
+    setWorkerLoading(true);
+
+    const username = workerUsername.trim().toLowerCase();
+    const passwordHash = await sha256Hex(workerPassword);
+
+    let finalId: bigint | null = null;
+    let returnedProfile: {
+      name?: string;
+      skill?: string;
+      location?: string;
+      bio?: string;
+      contact?: string;
+    } = {};
+
+    // 1. Check localStorage first (fast)
+    const localWorkerCreds = localStorage.getItem(
+      `knot_worker_username_${username}`,
+    );
+    if (localWorkerCreds) {
+      try {
+        const lw = JSON.parse(localWorkerCreds);
+        if (lw.passwordHash === passwordHash) {
+          finalId = BigInt(lw.id);
+          const existingProfile = localStorage.getItem(
+            `knot_worker_profile_${lw.id}`,
+          );
+          if (existingProfile) {
+            const ep = JSON.parse(existingProfile);
+            returnedProfile = {
+              name: ep.name,
+              skill: ep.skill,
+              location: ep.location,
+              bio: ep.bio,
+              contact: ep.contact,
+            };
+          }
+        } else {
+          setWorkerPasswordError("Username or password is incorrect.");
+          setWorkerLoading(false);
+          return;
+        }
+      } catch {
+        /**/
+      }
+    }
+
+    // 2. Try backend login
+    if (!finalId) {
+      const currentActor = await waitForActor();
+      if (currentActor) {
+        try {
+          const existing = await currentActor.loginWorker(
+            username,
+            passwordHash,
+          );
+          if (existing !== null && existing !== undefined) {
+            finalId = existing.id;
+            returnedProfile = {
+              name: existing.name,
+              skill: existing.skill,
+              location: existing.location,
+              bio: existing.bio,
+              contact: existing.contact,
+            };
+          }
+        } catch (err) {
+          console.warn("Worker backend login failed:", err);
+        }
+      }
+    }
+
+    if (!finalId) {
+      setWorkerPasswordError(
+        'Username or password is incorrect. Not registered? Click "New here? Register".',
+      );
+      setWorkerLoading(false);
+      return;
+    }
+
+    const name = returnedProfile.name ?? username;
+    setAuthUser({
+      role: "worker",
+      id: finalId,
+      name,
+      username,
+      skill: returnedProfile.skill ?? "",
+    });
+
+    toast.success(`Welcome back, ${name}! 👋`);
+    setWorkerLoading(false);
+    navigate({ to: "/worker-dashboard" });
+  }
+
+  // ─── Worker Register (new user — all fields) ─────────────────────────────────
+  async function handleWorkerRegister(e: React.FormEvent) {
     e.preventDefault();
     setWorkerPasswordError("");
     if (
@@ -221,10 +411,6 @@ export function LoginPage() {
       !workerContact.trim()
     ) {
       toast.error(t("error_please_fill_required"));
-      return;
-    }
-    if (!workerContact.trim()) {
-      toast.error("Phone number is required");
       return;
     }
     if (workerPassword.length < 6) {
@@ -264,7 +450,6 @@ export function LoginPage() {
         if (lw.passwordHash === passwordHash) {
           finalId = BigInt(lw.id);
           isReturning = true;
-          // Load existing profile
           const existingProfile = localStorage.getItem(
             `knot_worker_profile_${lw.id}`,
           );
@@ -278,7 +463,9 @@ export function LoginPage() {
             };
           }
         } else {
-          setWorkerPasswordError("Incorrect password. Please try again.");
+          setWorkerPasswordError(
+            "Username already taken. Please choose another.",
+          );
           setWorkerLoading(false);
           return;
         }
@@ -291,7 +478,6 @@ export function LoginPage() {
       const currentActor = await waitForActor();
       if (currentActor) {
         try {
-          // Try login first (re-login flow)
           const existing = await currentActor.loginWorker(
             username,
             passwordHash,
@@ -306,14 +492,14 @@ export function LoginPage() {
               contact: existing.contact,
             };
           } else {
-            // Check if username already exists on backend (wrong password)
             const byName = await currentActor.findWorkerByName(name);
             if (byName !== null && byName !== undefined) {
-              setWorkerPasswordError("Incorrect password. Please try again.");
+              setWorkerPasswordError(
+                "Username already taken. Try logging in instead.",
+              );
               setWorkerLoading(false);
               return;
             }
-            // Brand new registration
             finalId = await currentActor.registerWorker(
               username,
               passwordHash,
@@ -327,7 +513,7 @@ export function LoginPage() {
             );
           }
         } catch (err) {
-          console.warn("Worker auth failed, using local fallback:", err);
+          console.warn("Worker register failed, using local fallback:", err);
         }
       }
     }
@@ -398,7 +584,6 @@ export function LoginPage() {
 
     localStorage.setItem("knot_worker_id", userId.toString());
 
-    // Only overwrite profile on new registration; preserve existing data on re-login
     if (!isReturning) {
       const workerProfileData = {
         id: userId.toString(),
@@ -417,7 +602,6 @@ export function LoginPage() {
         `knot_worker_profile_${userId.toString()}`,
         JSON.stringify(workerProfileData),
       );
-      // Save credentials for future re-login
       localStorage.setItem(
         `knot_worker_username_${username}`,
         JSON.stringify({ id: userId.toString(), passwordHash }),
@@ -499,6 +683,74 @@ export function LoginPage() {
     setAdminLoading(false);
   }
 
+  // ─── Shared password field renderer ──────────────────────────────────────────
+  function PasswordField({
+    id,
+    ocid,
+    value,
+    onChange,
+    show,
+    onToggleShow,
+    error,
+    errorOcid,
+    accentColor = "amber",
+  }: {
+    id: string;
+    ocid: string;
+    value: string;
+    onChange: (v: string) => void;
+    show: boolean;
+    onToggleShow: () => void;
+    error?: string;
+    errorOcid?: string;
+    accentColor?: "amber" | "slate";
+  }) {
+    return (
+      <div className="space-y-1.5">
+        <Label
+          htmlFor={id}
+          className="font-body text-sm font-medium text-foreground"
+        >
+          <Lock className={`w-3.5 h-3.5 inline mr-1 text-${accentColor}-600`} />
+          Password
+        </Label>
+        <div className="relative">
+          <Input
+            id={id}
+            data-ocid={ocid}
+            type={show ? "text" : "password"}
+            placeholder="Min 6 characters"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="font-body border-border h-11 pr-10"
+            autoComplete="current-password"
+            required
+          />
+          <button
+            type="button"
+            onClick={onToggleShow}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={show ? "Hide password" : "Show password"}
+          >
+            {show ? (
+              <EyeOff className="w-4 h-4" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+        {error && (
+          <p
+            data-ocid={errorOcid}
+            className="text-red-600 text-xs font-body mt-1"
+          >
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="flex-1 min-h-screen flex items-center justify-center relative overflow-hidden">
       {/* Warm gradient background */}
@@ -548,7 +800,6 @@ export function LoginPage() {
           <p className="text-amber-700/70 text-sm font-body mt-1">
             Skills • Trust • Community
           </p>
-          {/* Security badge */}
           <div className="flex items-center gap-1.5 mt-2 px-3 py-1 bg-green-100 border border-green-300 rounded-full">
             <Lock className="w-3 h-3 text-green-600" />
             <span className="text-green-700 text-xs font-body font-semibold">
@@ -596,390 +847,576 @@ export function LoginPage() {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Citizen Tab */}
+              {/* ───── Citizen Tab ───── */}
               <TabsContent value="citizen" className="mt-0">
-                <form onSubmit={handleCitizenSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="citizen-name"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      {t("login_your_name")}
-                    </Label>
-                    <Input
-                      id="citizen-name"
-                      data-ocid="citizen.name.input"
-                      type="text"
-                      placeholder={t("login_enter_name")}
-                      value={citizenName}
-                      onChange={(e) => setCitizenName(e.target.value)}
-                      className="font-body border-border h-11"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="citizen-username"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      Username
-                    </Label>
-                    <Input
-                      id="citizen-username"
-                      data-ocid="citizen.username.input"
-                      type="text"
-                      placeholder="Choose a username (e.g. john_doe)"
-                      value={citizenUsername}
-                      onChange={(e) => setCitizenUsername(e.target.value)}
-                      className="font-body border-border h-11"
-                      autoComplete="username"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="citizen-password"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      <Lock className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      Password
-                    </Label>
-                    <div className="relative">
+                {/* Mode Toggle */}
+                <div className="flex rounded-xl overflow-hidden border border-amber-200 mb-5">
+                  <button
+                    type="button"
+                    data-ocid="citizen.login.toggle"
+                    onClick={() => {
+                      setCitizenMode("login");
+                      setCitizenPasswordError("");
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-body font-semibold transition-all ${
+                      citizenMode === "login"
+                        ? "bg-amber-600 text-white shadow-sm"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid="citizen.register.toggle"
+                    onClick={() => {
+                      setCitizenMode("register");
+                      setCitizenPasswordError("");
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-body font-semibold transition-all ${
+                      citizenMode === "register"
+                        ? "bg-amber-600 text-white shadow-sm"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Register
+                  </button>
+                </div>
+
+                {citizenMode === "login" ? (
+                  /* ── Citizen Login Form ── */
+                  <form onSubmit={handleCitizenLogin} className="space-y-4">
+                    <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60 mb-2">
+                      <p className="text-amber-800 text-xs font-body">
+                        👋 Welcome back! Enter your username and password to
+                        continue.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="citizen-login-username"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        Username
+                      </Label>
                       <Input
-                        id="citizen-password"
-                        data-ocid="citizen.password.input"
-                        type={showCitizenPassword ? "text" : "password"}
-                        placeholder="Min 6 characters"
-                        value={citizenPassword}
-                        onChange={(e) => {
-                          setCitizenPassword(e.target.value);
+                        id="citizen-login-username"
+                        data-ocid="citizen.username.input"
+                        type="text"
+                        placeholder="Your username"
+                        value={citizenUsername}
+                        onChange={(e) => setCitizenUsername(e.target.value)}
+                        className="font-body border-border h-11"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
+
+                    <PasswordField
+                      id="citizen-login-password"
+                      ocid="citizen.password.input"
+                      value={citizenPassword}
+                      onChange={(v) => {
+                        setCitizenPassword(v);
+                        setCitizenPasswordError("");
+                      }}
+                      show={showCitizenPassword}
+                      onToggleShow={() => setShowCitizenPassword((p) => !p)}
+                      error={citizenPasswordError}
+                      errorOcid="citizen.password.error_state"
+                    />
+
+                    <Button
+                      type="submit"
+                      data-ocid="citizen.submit_button"
+                      className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
+                      disabled={citizenLoading}
+                    >
+                      {citizenLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        <>
+                          <LogIn className="w-4 h-4 mr-2" />
+                          Login as Citizen
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-center text-xs font-body text-amber-700/60">
+                      New here?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCitizenMode("register");
                           setCitizenPasswordError("");
                         }}
-                        className="font-body border-border h-11 pr-10"
-                        autoComplete="current-password"
+                        className="text-amber-700 underline font-semibold hover:text-amber-900"
+                      >
+                        Create an account
+                      </button>
+                    </p>
+                  </form>
+                ) : (
+                  /* ── Citizen Register Form ── */
+                  <form onSubmit={handleCitizenRegister} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="citizen-name"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        {t("login_your_name")}
+                      </Label>
+                      <Input
+                        id="citizen-name"
+                        data-ocid="citizen.name.input"
+                        type="text"
+                        placeholder={t("login_enter_name")}
+                        value={citizenName}
+                        onChange={(e) => setCitizenName(e.target.value)}
+                        className="font-body border-border h-11"
                         required
                       />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="citizen-username"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        Username
+                      </Label>
+                      <Input
+                        id="citizen-username"
+                        data-ocid="citizen.username.input"
+                        type="text"
+                        placeholder="Choose a username (e.g. john_doe)"
+                        value={citizenUsername}
+                        onChange={(e) => setCitizenUsername(e.target.value)}
+                        className="font-body border-border h-11"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
+
+                    <PasswordField
+                      id="citizen-password"
+                      ocid="citizen.password.input"
+                      value={citizenPassword}
+                      onChange={(v) => {
+                        setCitizenPassword(v);
+                        setCitizenPasswordError("");
+                      }}
+                      show={showCitizenPassword}
+                      onToggleShow={() => setShowCitizenPassword((p) => !p)}
+                      error={citizenPasswordError}
+                      errorOcid="citizen.password.error_state"
+                    />
+
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="citizen-address"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        <MapPin className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                        {t("login_your_location")}
+                      </Label>
+                      <Input
+                        id="citizen-address"
+                        data-ocid="citizen.address.input"
+                        type="text"
+                        placeholder={t("login_enter_city")}
+                        value={citizenAddress}
+                        onChange={(e) => setCitizenAddress(e.target.value)}
+                        className="font-body border-border h-11"
+                        required
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      data-ocid="citizen.submit_button"
+                      className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
+                      disabled={citizenLoading}
+                    >
+                      {citizenLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t("login_finding_workers")}
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          {t("login_enter_as_citizen")}
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-center text-xs font-body text-amber-700/60">
+                      Already registered?{" "}
                       <button
                         type="button"
-                        onClick={() => setShowCitizenPassword((p) => !p)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={
-                          showCitizenPassword
-                            ? "Hide password"
-                            : "Show password"
-                        }
+                        onClick={() => {
+                          setCitizenMode("login");
+                          setCitizenPasswordError("");
+                        }}
+                        className="text-amber-700 underline font-semibold hover:text-amber-900"
                       >
-                        {showCitizenPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
+                        Login here
                       </button>
-                    </div>
-                    {citizenPasswordError && (
-                      <p
-                        data-ocid="citizen.password.error_state"
-                        className="text-red-600 text-xs font-body mt-1"
-                      >
-                        {citizenPasswordError}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="citizen-address"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      <MapPin className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      {t("login_your_location")}
-                    </Label>
-                    <Input
-                      id="citizen-address"
-                      data-ocid="citizen.address.input"
-                      type="text"
-                      placeholder={t("login_enter_city")}
-                      value={citizenAddress}
-                      onChange={(e) => setCitizenAddress(e.target.value)}
-                      className="font-body border-border h-11"
-                      required
-                    />
-                  </div>
-
-                  <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60">
-                    <p className="text-amber-800 text-xs font-body">
-                      🔒 Your credentials are securely hashed. Use the same
-                      username &amp; password to log back in.
                     </p>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    data-ocid="citizen.submit_button"
-                    className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
-                    disabled={citizenLoading}
-                  >
-                    {citizenLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        {t("login_finding_workers")}
-                      </>
-                    ) : (
-                      t("login_enter_as_citizen")
-                    )}
-                  </Button>
-                </form>
+                  </form>
+                )}
               </TabsContent>
 
-              {/* Worker Tab */}
+              {/* ───── Worker Tab ───── */}
               <TabsContent value="worker" className="mt-0">
-                <form onSubmit={handleWorkerSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-name"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      {t("login_your_name")}
-                    </Label>
-                    <Input
-                      id="worker-name"
-                      data-ocid="worker.name.input"
-                      type="text"
-                      placeholder={t("login_enter_name")}
-                      value={workerName}
-                      onChange={(e) => setWorkerName(e.target.value)}
-                      className="font-body border-border h-11"
-                      required
-                    />
-                  </div>
+                {/* Mode Toggle */}
+                <div className="flex rounded-xl overflow-hidden border border-amber-200 mb-5">
+                  <button
+                    type="button"
+                    data-ocid="worker.login.toggle"
+                    onClick={() => {
+                      setWorkerMode("login");
+                      setWorkerPasswordError("");
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-body font-semibold transition-all ${
+                      workerMode === "login"
+                        ? "bg-amber-600 text-white shadow-sm"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid="worker.register.toggle"
+                    onClick={() => {
+                      setWorkerMode("register");
+                      setWorkerPasswordError("");
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-body font-semibold transition-all ${
+                      workerMode === "register"
+                        ? "bg-amber-600 text-white shadow-sm"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Register
+                  </button>
+                </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-username"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      Username
-                    </Label>
-                    <Input
-                      id="worker-username"
-                      data-ocid="worker.username.input"
-                      type="text"
-                      placeholder="Choose a unique username"
-                      value={workerUsername}
-                      onChange={(e) => setWorkerUsername(e.target.value)}
-                      className="font-body border-border h-11"
-                      autoComplete="username"
-                      required
-                    />
-                  </div>
+                {workerMode === "login" ? (
+                  /* ── Worker Login Form ── */
+                  <form onSubmit={handleWorkerLogin} className="space-y-4">
+                    <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60 mb-2">
+                      <p className="text-amber-800 text-xs font-body">
+                        👋 Welcome back! Enter your username and password to
+                        continue.
+                      </p>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-password"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      <Lock className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      Password
-                    </Label>
-                    <div className="relative">
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-login-username"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        Username
+                      </Label>
                       <Input
-                        id="worker-password"
-                        data-ocid="worker.password.input"
-                        type={showWorkerPassword ? "text" : "password"}
-                        placeholder="Min 6 characters"
-                        value={workerPassword}
-                        onChange={(e) => {
-                          setWorkerPassword(e.target.value);
+                        id="worker-login-username"
+                        data-ocid="worker.username.input"
+                        type="text"
+                        placeholder="Your username"
+                        value={workerUsername}
+                        onChange={(e) => setWorkerUsername(e.target.value)}
+                        className="font-body border-border h-11"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
+
+                    <PasswordField
+                      id="worker-login-password"
+                      ocid="worker.password.input"
+                      value={workerPassword}
+                      onChange={(v) => {
+                        setWorkerPassword(v);
+                        setWorkerPasswordError("");
+                      }}
+                      show={showWorkerPassword}
+                      onToggleShow={() => setShowWorkerPassword((p) => !p)}
+                      error={workerPasswordError}
+                      errorOcid="worker.password.error_state"
+                    />
+
+                    <Button
+                      type="submit"
+                      data-ocid="worker.submit_button"
+                      className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
+                      disabled={workerLoading}
+                    >
+                      {workerLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        <>
+                          <LogIn className="w-4 h-4 mr-2" />
+                          Login as Worker
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-center text-xs font-body text-amber-700/60">
+                      New here?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWorkerMode("register");
                           setWorkerPasswordError("");
                         }}
-                        className="font-body border-border h-11 pr-10"
-                        autoComplete="current-password"
+                        className="text-amber-700 underline font-semibold hover:text-amber-900"
+                      >
+                        Register as a worker
+                      </button>
+                    </p>
+                  </form>
+                ) : (
+                  /* ── Worker Register Form ── */
+                  <form onSubmit={handleWorkerRegister} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-name"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        {t("login_your_name")}
+                      </Label>
+                      <Input
+                        id="worker-name"
+                        data-ocid="worker.name.input"
+                        type="text"
+                        placeholder={t("login_enter_name")}
+                        value={workerName}
+                        onChange={(e) => setWorkerName(e.target.value)}
+                        className="font-body border-border h-11"
                         required
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowWorkerPassword((p) => !p)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={
-                          showWorkerPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showWorkerPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
                     </div>
-                    {workerPasswordError && (
-                      <p
-                        data-ocid="worker.password.error_state"
-                        className="text-red-600 text-xs font-body mt-1"
+
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-username"
+                        className="font-body text-sm font-medium text-foreground"
                       >
-                        {workerPasswordError}
-                      </p>
-                    )}
-                  </div>
+                        Username
+                      </Label>
+                      <Input
+                        id="worker-username"
+                        data-ocid="worker.username.input"
+                        type="text"
+                        placeholder="Choose a unique username"
+                        value={workerUsername}
+                        onChange={(e) => setWorkerUsername(e.target.value)}
+                        className="font-body border-border h-11"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-skill"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      {t("login_your_skill")}
-                    </Label>
-                    <Input
-                      id="worker-skill"
-                      data-ocid="worker.skill.input"
-                      type="text"
-                      placeholder={t("login_select_skill")}
-                      value={workerSkill}
-                      onChange={(e) => setWorkerSkill(e.target.value)}
-                      className="font-body border-border h-11"
-                      required
+                    <PasswordField
+                      id="worker-password"
+                      ocid="worker.password.input"
+                      value={workerPassword}
+                      onChange={(v) => {
+                        setWorkerPassword(v);
+                        setWorkerPasswordError("");
+                      }}
+                      show={showWorkerPassword}
+                      onToggleShow={() => setShowWorkerPassword((p) => !p)}
+                      error={workerPasswordError}
+                      errorOcid="worker.password.error_state"
                     />
-                  </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-location"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      <MapPin className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      {t("login_location_label")}
-                    </Label>
-                    <Input
-                      id="worker-location"
-                      data-ocid="worker.location.input"
-                      type="text"
-                      placeholder={t("login_enter_city")}
-                      value={workerLocation}
-                      onChange={(e) => setWorkerLocation(e.target.value)}
-                      className="font-body border-border h-11"
-                      required
-                    />
-                  </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-skill"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        {t("login_your_skill")}
+                      </Label>
+                      <Input
+                        id="worker-skill"
+                        data-ocid="worker.skill.input"
+                        type="text"
+                        placeholder={t("login_select_skill")}
+                        value={workerSkill}
+                        onChange={(e) => setWorkerSkill(e.target.value)}
+                        className="font-body border-border h-11"
+                        required
+                      />
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-bio"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      {t("login_bio")}{" "}
-                      <span className="text-muted-foreground font-normal">
-                        ({t("login_optional")})
-                      </span>
-                    </Label>
-                    <Textarea
-                      id="worker-bio"
-                      data-ocid="worker.bio.textarea"
-                      placeholder={t("login_bio_placeholder")}
-                      value={workerBio}
-                      onChange={(e) => setWorkerBio(e.target.value)}
-                      className="font-body border-border resize-none"
-                      rows={3}
-                    />
-                  </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-location"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        <MapPin className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                        {t("login_location_label")}
+                      </Label>
+                      <Input
+                        id="worker-location"
+                        data-ocid="worker.location.input"
+                        type="text"
+                        placeholder={t("login_enter_city")}
+                        value={workerLocation}
+                        onChange={(e) => setWorkerLocation(e.target.value)}
+                        className="font-body border-border h-11"
+                        required
+                      />
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="worker-contact"
-                      className="font-body text-sm font-medium text-foreground"
-                    >
-                      <Phone className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      Contact Number
-                    </Label>
-                    <Input
-                      id="worker-contact"
-                      data-ocid="worker.contact.input"
-                      type="tel"
-                      placeholder="e.g. +91 98765 43210"
-                      value={workerContact}
-                      onChange={(e) => setWorkerContact(e.target.value)}
-                      className="font-body border-border h-11"
-                      required
-                    />
-                  </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-bio"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        {t("login_bio")}{" "}
+                        <span className="text-muted-foreground font-normal">
+                          ({t("login_optional")})
+                        </span>
+                      </Label>
+                      <Textarea
+                        id="worker-bio"
+                        data-ocid="worker.bio.textarea"
+                        placeholder={t("login_bio_placeholder")}
+                        value={workerBio}
+                        onChange={(e) => setWorkerBio(e.target.value)}
+                        className="font-body border-border resize-none"
+                        rows={3}
+                      />
+                    </div>
 
-                  {/* Video Upload */}
-                  <div className="space-y-1.5">
-                    <Label className="font-body text-sm font-medium text-foreground">
-                      <Video className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
-                      {t("login_video_profile")}{" "}
-                      <span className="text-muted-foreground font-normal">
-                        ({t("login_optional")})
-                      </span>
-                    </Label>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="video/mp4,video/*"
-                      className="hidden"
-                      onChange={handleVideoSelect}
-                    />
-                    {workerVideoFile ? (
-                      <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                        <Video className="w-5 h-5 text-green-600 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-green-800 text-sm font-body font-medium truncate">
-                            {workerVideoFile.name}
-                          </p>
-                          <p className="text-green-600 text-xs font-body">
-                            {(workerVideoFile.size / (1024 * 1024)).toFixed(1)}{" "}
-                            MB · {t("login_ready_upload")}
-                          </p>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="worker-contact"
+                        className="font-body text-sm font-medium text-foreground"
+                      >
+                        <Phone className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                        Contact Number
+                      </Label>
+                      <Input
+                        id="worker-contact"
+                        data-ocid="worker.contact.input"
+                        type="tel"
+                        placeholder="e.g. +91 98765 43210"
+                        value={workerContact}
+                        onChange={(e) => setWorkerContact(e.target.value)}
+                        className="font-body border-border h-11"
+                        required
+                      />
+                    </div>
+
+                    {/* Video Upload */}
+                    <div className="space-y-1.5">
+                      <Label className="font-body text-sm font-medium text-foreground">
+                        <Video className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                        {t("login_video_profile")}{" "}
+                        <span className="text-muted-foreground font-normal">
+                          ({t("login_optional")})
+                        </span>
+                      </Label>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="video/mp4,video/*"
+                        className="hidden"
+                        onChange={handleVideoSelect}
+                      />
+                      {workerVideoFile ? (
+                        <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                          <Video className="w-5 h-5 text-green-600 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-green-800 text-sm font-body font-medium truncate">
+                              {workerVideoFile.name}
+                            </p>
+                            <p className="text-green-600 text-xs font-body">
+                              {(workerVideoFile.size / (1024 * 1024)).toFixed(
+                                1,
+                              )}{" "}
+                              MB · {t("login_ready_upload")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setWorkerVideoFile(null)}
+                            className="text-green-600 hover:text-green-800 text-xs font-body underline"
+                          >
+                            {t("login_remove")}
+                          </button>
                         </div>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => setWorkerVideoFile(null)}
-                          className="text-green-600 hover:text-green-800 text-xs font-body underline"
+                          data-ocid="worker.video.upload_button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full h-20 border-2 border-dashed border-amber-300 rounded-lg flex flex-col items-center justify-center gap-1.5 text-amber-600 hover:border-amber-500 hover:bg-amber-50 transition-all group"
                         >
-                          {t("login_remove")}
+                          <Upload className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                          <span className="text-sm font-body font-medium">
+                            {t("login_upload_video")}
+                          </span>
+                          <span className="text-xs font-body text-amber-500">
+                            MP4 supported · {t("login_video_formats")}
+                          </span>
                         </button>
-                      </div>
-                    ) : (
+                      )}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      data-ocid="worker.submit_button"
+                      className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
+                      disabled={workerLoading}
+                    >
+                      {workerLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t("login_creating_profile")}
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          {t("login_register_as_worker")}
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-center text-xs font-body text-amber-700/60">
+                      Already registered?{" "}
                       <button
                         type="button"
-                        data-ocid="worker.video.upload_button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full h-20 border-2 border-dashed border-amber-300 rounded-lg flex flex-col items-center justify-center gap-1.5 text-amber-600 hover:border-amber-500 hover:bg-amber-50 transition-all group"
+                        onClick={() => {
+                          setWorkerMode("login");
+                          setWorkerPasswordError("");
+                        }}
+                        className="text-amber-700 underline font-semibold hover:text-amber-900"
                       >
-                        <Upload className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span className="text-sm font-body font-medium">
-                          {t("login_upload_video")}
-                        </span>
-                        <span className="text-xs font-body text-amber-500">
-                          MP4 supported · {t("login_video_formats")}
-                        </span>
+                        Login here
                       </button>
-                    )}
-                  </div>
-
-                  <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60">
-                    <p className="text-amber-800 text-xs font-body">
-                      🔒 Your credentials are securely hashed. Use the same
-                      username &amp; password to log back in.
                     </p>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    data-ocid="worker.submit_button"
-                    className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-body font-semibold shadow-lg shadow-amber-600/20 transition-all"
-                    disabled={workerLoading}
-                  >
-                    {workerLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        {t("login_creating_profile")}
-                      </>
-                    ) : (
-                      t("login_register_as_worker")
-                    )}
-                  </Button>
-                </form>
+                  </form>
+                )}
               </TabsContent>
 
-              {/* Admin Tab */}
+              {/* ───── Admin Tab ───── */}
               <TabsContent value="admin" className="mt-0">
                 <form onSubmit={handleAdminSubmit} className="space-y-4">
                   <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
