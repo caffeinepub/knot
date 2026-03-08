@@ -2,58 +2,23 @@ import { ExternalLink, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
-// ── Google AdSense Configuration ─────────────────────────────────────────────
+// ── Propeller Ads Configuration ───────────────────────────────────────────────
 //
-// HOW TO ENABLE REAL ADS AND EARN REVENUE:
+// HOW TO EARN REAL REVENUE WITH PROPELLER ADS (works on subdomains like icp0.io!):
 //
-// STEP 1: Go to https://adsense.google.com and sign up with your Google account
-// STEP 2: Add your website domain (e.g. knot-app.your-domain.com) and wait for verification
-// STEP 3: Once approved, go to AdSense dashboard → Your Publisher ID (looks like: ca-pub-1234567890123456)
-// STEP 4: Create two ad units in AdSense:
-//           - Banner ad unit (horizontal, 728x90 or responsive)
-//           - Rectangle ad unit (300x250 for popup)
-//         Each unit gives you a slot ID (e.g. 1234567890)
-// STEP 5: Replace the three values below with your real IDs:
-//           ADSENSE_CLIENT  → your Publisher ID  (e.g. "ca-pub-1234567890123456")
-//           BANNER_AD_SLOT  → your banner ad unit ID
-//           POPUP_AD_SLOT   → your rectangle ad unit ID
+// STEP 1: Sign up at https://publishers.propellerads.com
+// STEP 2: Add your site — it WORKS on icp0.io subdomains (no custom domain required)
+// STEP 3: Create an ad zone → get your Zone ID (a number like "4887601")
+// STEP 4: Replace PROPELLER_ZONE_ID below with your actual Zone ID
+// STEP 5: Set PROPELLER_ADS_ENABLED = true
 //
-// Once these are set, real ads from Google's network will replace the demo placeholders
-// and you will earn revenue for every impression and click.
+// Propeller Ads supports: Display banners, native ads, push notifications, pop-under
+// No top-level domain approval required. Subdomain-friendly.
 //
-const ADSENSE_CLIENT = "ca-pub-XXXXXXXXXXXXXXXX";
-const BANNER_AD_SLOT = "1234567890"; // Replace with your banner ad unit ID
-const POPUP_AD_SLOT = "0987654321"; // Replace with your popup ad unit ID
+const PROPELLER_ADS_ENABLED = false; // Set to true after adding your Zone ID
+const PROPELLER_ZONE_ID = "YOUR_ZONE_ID_HERE"; // e.g. "4887601"
 
-declare global {
-  interface Window {
-    adsbygoogle: Array<Record<string, unknown>>;
-  }
-}
-
-function loadAdSenseScript() {
-  if (typeof document === "undefined") return;
-  if (document.querySelector('script[src*="pagead2.googlesyndication.com"]'))
-    return;
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
-  script.crossOrigin = "anonymous";
-  document.head.appendChild(script);
-}
-
-function pushAdSlot() {
-  try {
-    if (!window.adsbygoogle) window.adsbygoogle = [];
-    window.adsbygoogle.push({});
-  } catch {
-    // AdSense not loaded or blocked
-  }
-}
-
-const isRealPublisherId = !ADSENSE_CLIENT.includes("XXXXXXXX");
-
-// ── Fallback / Placeholder Ads (shown until real AdSense is configured) ───────
+// ── Fallback / Placeholder Ads (shown when Propeller Ads is not configured) ───
 
 interface FallbackAd {
   id: string;
@@ -136,23 +101,32 @@ const FALLBACK_ADS: FallbackAd[] = [
   },
 ];
 
+// Inject Propeller Ads script once
+let propellerScriptInjected = false;
+function injectPropellerAds() {
+  if (!PROPELLER_ADS_ENABLED) return;
+  if (propellerScriptInjected) return;
+  if (typeof document === "undefined") return;
+  propellerScriptInjected = true;
+  const s = document.createElement("script");
+  s.type = "text/javascript";
+  s.async = true;
+  s.src = `//cdn.propellerads.com/zones/${PROPELLER_ZONE_ID}.js?t=${Math.floor(Math.random() * 100000)}`;
+  s.setAttribute("data-zone", PROPELLER_ZONE_ID);
+  (document.body || document.documentElement).appendChild(s);
+}
+
 // ── Banner Ad (inline in feed / assessment) ───────────────────────────────────
 
 export function BannerAd({ className = "" }: { className?: string }) {
-  const insRef = useRef<HTMLModElement>(null);
+  const propellerContainerRef = useRef<HTMLDivElement>(null);
   const [adIndex] = useState(() =>
     Math.floor(Math.random() * FALLBACK_ADS.length),
   );
   const ad = FALLBACK_ADS[adIndex];
 
   useEffect(() => {
-    loadAdSenseScript();
-    if (isRealPublisherId) {
-      const timer = setTimeout(() => {
-        pushAdSlot();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
+    injectPropellerAds();
   }, []);
 
   return (
@@ -160,17 +134,13 @@ export function BannerAd({ className = "" }: { className?: string }) {
       className={`rounded-2xl overflow-hidden shadow-md border border-white/10 ${className}`}
       data-ocid="banner_ad.card"
     >
-      {isRealPublisherId ? (
-        <div className="min-h-[90px] bg-gray-50 flex items-center justify-center">
-          <ins
-            ref={insRef}
-            className="adsbygoogle"
-            style={{ display: "block", width: "100%", minHeight: "90px" }}
-            data-ad-client={ADSENSE_CLIENT}
-            data-ad-slot={BANNER_AD_SLOT}
-            data-ad-format="auto"
-            data-full-width-responsive="true"
-          />
+      {PROPELLER_ADS_ENABLED ? (
+        /* Propeller Ads renders globally — this is a container placeholder */
+        <div
+          ref={propellerContainerRef}
+          className="min-h-[90px] bg-gray-50 flex items-center justify-center"
+        >
+          <p className="text-gray-400 text-xs font-body">Advertisement</p>
         </div>
       ) : (
         <a
@@ -216,10 +186,11 @@ export function BannerAd({ className = "" }: { className?: string }) {
               {ad.cta}
             </div>
           </div>
-          {/* Demo label — only shown until real AdSense is configured */}
+          {/* Demo label — only shown until Propeller Ads is configured */}
           <div className="px-3 py-1 bg-black/50 text-center">
             <p className="font-body text-[9px] text-white/40 tracking-wide">
-              Demo ad · Configure AdSense (see PopupAd.tsx) to earn real revenue
+              Demo ad · Sign up at propellerads.com to earn real revenue (works
+              on subdomains!)
             </p>
           </div>
         </a>
@@ -237,38 +208,31 @@ export function PopupAd() {
     Math.floor(Math.random() * FALLBACK_ADS.length),
   );
   const ad = FALLBACK_ADS[adIndex];
-  const insRef = useRef<HTMLModElement>(null);
 
   useEffect(() => {
-    loadAdSenseScript();
+    injectPropellerAds();
   }, []);
 
   // Show after 8 seconds
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!dismissed) setVisible(true);
     }, 8000);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [dismissed]);
 
   // Re-show every 2 minutes
   useEffect(() => {
     if (dismissed) {
-      const t = setTimeout(
+      const timer = setTimeout(
         () => {
           setDismissed(false);
         },
         2 * 60 * 1000,
       );
-      return () => clearTimeout(t);
+      return () => clearTimeout(timer);
     }
   }, [dismissed]);
-
-  useEffect(() => {
-    if (visible && isRealPublisherId) {
-      setTimeout(() => pushAdSlot(), 100);
-    }
-  }, [visible]);
 
   function handleDismiss() {
     setVisible(false);
@@ -287,106 +251,76 @@ export function PopupAd() {
           className="fixed bottom-6 right-6 z-50 w-[320px] rounded-2xl overflow-hidden shadow-2xl"
           data-ocid="popup_ad.modal"
         >
-          {isRealPublisherId ? (
-            <div className="bg-white rounded-2xl overflow-hidden border border-gray-200">
-              <div className="flex items-center justify-between px-4 pt-3 pb-2 bg-gray-50 border-b border-gray-200">
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                  Sponsored
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
-                  data-ocid="popup_ad.close_button"
-                >
-                  <X className="w-3 h-3 text-gray-600" />
-                </button>
-              </div>
-              <div className="p-2 min-h-[250px]">
-                <ins
-                  ref={insRef}
-                  className="adsbygoogle"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    minHeight: "250px",
-                  }}
-                  data-ad-client={ADSENSE_CLIENT}
-                  data-ad-slot={POPUP_AD_SLOT}
-                  data-ad-format="rectangle"
-                />
-              </div>
+          <div
+            className="rounded-2xl overflow-hidden border border-white/10"
+            style={{ background: ad.bgGradient }}
+          >
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <span
+                className="text-[9px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest"
+                style={{
+                  background: "rgba(255,255,255,0.12)",
+                  color: ad.accentColor,
+                  border: `1px solid ${ad.accentColor}40`,
+                }}
+              >
+                {ad.tag}
+              </span>
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                data-ocid="popup_ad.close_button"
+              >
+                <X className="w-3.5 h-3.5 text-white/70" />
+              </button>
             </div>
-          ) : (
-            <div
-              className="rounded-2xl overflow-hidden border border-white/10"
-              style={{ background: ad.bgGradient }}
-            >
-              {/* Header bar */}
-              <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                <span
-                  className="text-[9px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-widest"
-                  style={{
-                    background: "rgba(255,255,255,0.12)",
-                    color: ad.accentColor,
-                    border: `1px solid ${ad.accentColor}40`,
-                  }}
-                >
-                  {ad.tag}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                  data-ocid="popup_ad.close_button"
-                >
-                  <X className="w-3.5 h-3.5 text-white/70" />
-                </button>
-              </div>
 
-              {/* Body */}
-              <div className="px-5 pb-5 flex flex-col items-center text-center gap-3">
-                <span className="text-6xl select-none drop-shadow-xl">
-                  {ad.emoji}
-                </span>
-                <div>
-                  <h3 className="font-display font-bold text-white text-lg mb-1.5">
-                    {ad.title}
-                  </h3>
-                  <p className="font-body text-white/65 text-sm leading-relaxed">
-                    {ad.description}
-                  </p>
-                </div>
-                <a
-                  href={ad.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleDismiss();
-                  }}
-                  className="w-full py-3 rounded-xl text-sm font-body font-bold text-center transition-all hover:opacity-90 active:scale-95 flex items-center justify-center gap-1.5"
-                  style={{ background: ad.accentColor, color: "#000" }}
-                  data-ocid="popup_ad.cta_button"
-                >
-                  {ad.cta}
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  className="font-body text-xs text-white/35 hover:text-white/55 transition-colors"
-                  data-ocid="popup_ad.dismiss_button"
-                >
-                  No thanks, close ad
-                </button>
-                {/* Demo label — only shown until real AdSense is configured */}
-                <p className="font-body text-[9px] text-white/25 tracking-wide">
-                  Demo ad · Configure AdSense to earn real revenue
+            {/* Body */}
+            <div className="px-5 pb-5 flex flex-col items-center text-center gap-3">
+              <span className="text-6xl select-none drop-shadow-xl">
+                {ad.emoji}
+              </span>
+              <div>
+                <h3 className="font-display font-bold text-white text-lg mb-1.5">
+                  {ad.title}
+                </h3>
+                <p className="font-body text-white/65 text-sm leading-relaxed">
+                  {ad.description}
                 </p>
               </div>
+              <a
+                href={ad.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDismiss();
+                }}
+                className="w-full py-3 rounded-xl text-sm font-body font-bold text-center transition-all hover:opacity-90 active:scale-95 flex items-center justify-center gap-1.5"
+                style={{ background: ad.accentColor, color: "#000" }}
+                data-ocid="popup_ad.cta_button"
+              >
+                {ad.cta}
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="font-body text-xs text-white/35 hover:text-white/55 transition-colors"
+                data-ocid="popup_ad.dismiss_button"
+              >
+                No thanks, close ad
+              </button>
+              {!PROPELLER_ADS_ENABLED && (
+                <p className="font-body text-[9px] text-white/25 tracking-wide">
+                  Demo ad · Configure Propeller Ads to earn real revenue
+                  (subdomain-friendly)
+                </p>
+              )}
             </div>
-          )}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

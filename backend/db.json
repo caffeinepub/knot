@@ -1,0 +1,13 @@
+{
+  "users": [],
+  "citizens": [],
+  "learningRequests": [],
+  "certificationResults": [],
+  "practicalVideoSubmissions": [],
+  "videoStore": [],
+  "workerCredentials": [],
+  "citizenCredentials": [],
+  "nextUserId": 1,
+  "nextCitizenId": 1,
+  "nextRequestId": 1
+}

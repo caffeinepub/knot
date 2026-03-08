@@ -228,6 +228,33 @@ export interface Translations {
   nav_language: string;
   notif_clear_all: string;
   footer_meet_team: string;
+
+  // Login UI translation keys
+  login_login_btn: string;
+  login_register_btn: string;
+  login_new_here: string;
+  login_create_account: string;
+  login_already_registered: string;
+  login_login_here: string;
+  login_username_label: string;
+  login_password_label: string;
+  login_password_placeholder: string;
+  login_signing_in: string;
+  login_authenticating: string;
+  login_admin_access: string;
+  login_admin_username_label: string;
+  login_admin_password_label: string;
+  login_admin_enter_username: string;
+  login_admin_enter_password: string;
+  login_access_admin: string;
+  login_video_required: string;
+
+  // Map / nearby keys
+  map_nearby_title: string;
+  map_loading: string;
+  map_click_worker: string;
+  map_workers_on_map: string;
+  map_show_hide: string;
 }
 
 const en: Translations = {
@@ -454,6 +481,31 @@ const en: Translations = {
   nav_language: "Language",
   notif_clear_all: "Clear all",
   footer_meet_team: "Meet the Team",
+
+  login_login_btn: "Login",
+  login_register_btn: "Register",
+  login_new_here: "New here?",
+  login_create_account: "Create an account",
+  login_already_registered: "Already registered?",
+  login_login_here: "Login here",
+  login_username_label: "Username",
+  login_password_label: "Password",
+  login_password_placeholder: "Min 6 characters",
+  login_signing_in: "Signing in...",
+  login_authenticating: "Authenticating...",
+  login_admin_access: "Admin access only. Restricted to authorized personnel.",
+  login_admin_username_label: "Admin Username",
+  login_admin_password_label: "Admin Password",
+  login_admin_enter_username: "Enter admin username",
+  login_admin_enter_password: "Enter admin password",
+  login_access_admin: "Access Admin Panel",
+  login_video_required: "Skill video is required",
+
+  map_nearby_title: "Nearby Workers on Map",
+  map_loading: "Loading map...",
+  map_click_worker: "Click a worker card to see their location",
+  map_workers_on_map: "workers on map",
+  map_show_hide: "Show / Hide Map",
 };
 
 const te: Translations = {
@@ -674,6 +726,31 @@ const te: Translations = {
   nav_language: "భాష",
   notif_clear_all: "అన్నీ క్లియర్ చేయి",
   footer_meet_team: "మా టీమ్",
+
+  login_login_btn: "లాగిన్",
+  login_register_btn: "నమోదు చేయండి",
+  login_new_here: "కొత్తగా వచ్చారా?",
+  login_create_account: "ఖాతా సృష్టించండి",
+  login_already_registered: "ఇప్పటికే నమోదయ్యారా?",
+  login_login_here: "ఇక్కడ లాగిన్ చేయండి",
+  login_username_label: "వినియోగదారు పేరు",
+  login_password_label: "పాస్‌వర్డ్",
+  login_password_placeholder: "కనీసం 6 అక్షరాలు",
+  login_signing_in: "సైన్ ఇన్ అవుతున్నారు...",
+  login_authenticating: "ధృవీకరిస్తున్నారు...",
+  login_admin_access: "అడ్మిన్ యాక్సెస్ మాత్రమే. అధికారిత సిబ్బందికి పరిమితం.",
+  login_admin_username_label: "అడ్మిన్ వినియోగదారు పేరు",
+  login_admin_password_label: "అడ్మిన్ పాస్‌వర్డ్",
+  login_admin_enter_username: "అడ్మిన్ వినియోగదారు పేరు నమోదు చేయండి",
+  login_admin_enter_password: "అడ్మిన్ పాస్‌వర్డ్ నమోదు చేయండి",
+  login_access_admin: "అడ్మిన్ పేనల్ యాక్సెస్ చేయండి",
+  login_video_required: "నైపుణ్య వీడియో తప్పనిసరి",
+
+  map_nearby_title: "మ్యాప్‌లో సమీప కార్మికులు",
+  map_loading: "మ్యాప్ లోడ్ అవుతున్నది...",
+  map_click_worker: "కార్మికుడి కార్డ్ క్లిక్ చేసి వారి స్థానం చూడండి",
+  map_workers_on_map: "కార్మికులు మ్యాప్‌లో",
+  map_show_hide: "మ్యాప్ చూపించు / దాచు",
 };
 
 const hi: Translations = {
@@ -897,6 +974,31 @@ const hi: Translations = {
   nav_language: "भाषा",
   notif_clear_all: "सभी हटाएं",
   footer_meet_team: "हमारी टीम",
+
+  login_login_btn: "लॉगिन",
+  login_register_btn: "पंजीकरण करें",
+  login_new_here: "नए हैं?",
+  login_create_account: "खाता बनाएं",
+  login_already_registered: "पहले से पंजीकृत हैं?",
+  login_login_here: "यहाँ लॉगिन करें",
+  login_username_label: "उपयोगकर्ता नाम",
+  login_password_label: "पासवर्ड",
+  login_password_placeholder: "न्यूनतम 6 अक्षर",
+  login_signing_in: "साइन इन हो रहे हैं...",
+  login_authenticating: "प्रमाणीकरण हो रहा है...",
+  login_admin_access: "केवल एडमिन एक्सेस। अधिकृत कर्मियों तक सीमित।",
+  login_admin_username_label: "एडमिन उपयोगकर्ता नाम",
+  login_admin_password_label: "एडमिन पासवर्ड",
+  login_admin_enter_username: "एडमिन उपयोगकर्ता नाम दर्ज करें",
+  login_admin_enter_password: "एडमिन पासवर्ड दर्ज करें",
+  login_access_admin: "एडमिन पैनल एक्सेस करें",
+  login_video_required: "कौशल वीडियो अनिवार्य है",
+
+  map_nearby_title: "मानचित्र पर पास के कारीगर",
+  map_loading: "मानचित्र लोड हो रहा है...",
+  map_click_worker: "कारीगर कार्ड पर क्लिक करके उनका स्थान देखें",
+  map_workers_on_map: "कारीगर मानचित्र पर",
+  map_show_hide: "मानचित्र दिखाएं / छुपाएं",
 };
 
 const ml: Translations = {
@@ -1119,6 +1221,31 @@ const ml: Translations = {
   nav_language: "ഭാഷ",
   notif_clear_all: "എല്ലാം മായ്ക്കൂ",
   footer_meet_team: "ഞങ്ങളുടെ ടീം",
+
+  login_login_btn: "ലോഗിൻ",
+  login_register_btn: "രജിസ്റ്റർ ചെയ്യൂ",
+  login_new_here: "പുതിയ ഉപയോക്താവോ?",
+  login_create_account: "അക്കൗണ്ട് ഉണ്ടാക്കൂ",
+  login_already_registered: "ഇതിനകം രജിസ്റ്റർ ചെയ്തിട്ടുണ്ടോ?",
+  login_login_here: "ഇവിടെ ലോഗിൻ ചെയ്യൂ",
+  login_username_label: "ഉപയോക്തൃനാമം",
+  login_password_label: "പാസ്‌വേഡ്",
+  login_password_placeholder: "കുറഞ്ഞത് 6 അക്ഷരങ്ങൾ",
+  login_signing_in: "സൈൻ ഇൻ ചെയ്യുന്നു...",
+  login_authenticating: "പ്രാമാണീകരിക്കുന്നു...",
+  login_admin_access: "അഡ്മിൻ ആക്സസ് മാത്രം. അധികൃത ഉദ്യോഗസ്ഥർക്ക് മാത്രം.",
+  login_admin_username_label: "അഡ്മിൻ ഉപയോക്തൃനാമം",
+  login_admin_password_label: "അഡ്മിൻ പാസ്‌വേഡ്",
+  login_admin_enter_username: "അഡ്മിൻ ഉപയോക്തൃനാമം നൽകൂ",
+  login_admin_enter_password: "അഡ്മിൻ പാസ്‌വേഡ് നൽകൂ",
+  login_access_admin: "അഡ്മിൻ പാനൽ ആക്സസ് ചെയ്യൂ",
+  login_video_required: "കഴിവ് വീഡിയോ നിർബന്ധമാണ്",
+
+  map_nearby_title: "മാപ്പിൽ സമീപ തൊഴിലാളികൾ",
+  map_loading: "മാപ്പ് ലോഡ് ചെയ്യുന്നു...",
+  map_click_worker: "തൊഴിലാളിയുടെ കാർഡ് ക്ലിക്ക് ചെയ്ത് സ്ഥലം കാണൂ",
+  map_workers_on_map: "തൊഴിലാളികൾ മാപ്പിൽ",
+  map_show_hide: "മാപ്പ് കാണിക്കൂ / മറയ്ക്കൂ",
 };
 
 const kn: Translations = {
@@ -1339,6 +1466,31 @@ const kn: Translations = {
   nav_language: "ಭಾಷೆ",
   notif_clear_all: "ಎಲ್ಲವನ್ನೂ ತೆರವುಗೊಳಿಸಿ",
   footer_meet_team: "ನಮ್ಮ ತಂಡ",
+
+  login_login_btn: "ಲಾಗಿನ್",
+  login_register_btn: "ನೋಂದಾಯಿಸಿ",
+  login_new_here: "ಹೊಸದಾಗಿ ಬಂದಿರಾ?",
+  login_create_account: "ಖಾತೆ ತೆರೆಯಿರಿ",
+  login_already_registered: "ಈಗಾಗಲೇ ನೋಂದಾಯಿಸಿದ್ದೀರಾ?",
+  login_login_here: "ಇಲ್ಲಿ ಲಾಗಿನ್ ಮಾಡಿ",
+  login_username_label: "ಬಳಕೆದಾರ ಹೆಸರು",
+  login_password_label: "ಪಾಸ್‌ವರ್ಡ್",
+  login_password_placeholder: "ಕನಿಷ್ಠ 6 ಅಕ್ಷರಗಳು",
+  login_signing_in: "ಸೈನ್ ಇನ್ ಆಗುತ್ತಿದೆ...",
+  login_authenticating: "ದೃಢೀಕರಿಸಲಾಗುತ್ತಿದೆ...",
+  login_admin_access: "ಅಡ್ಮಿನ್ ಪ್ರವೇಶ ಮಾತ್ರ. ಅಧಿಕೃತ ಸಿಬ್ಬಂದಿಗೆ ಮಾತ್ರ.",
+  login_admin_username_label: "ಅಡ್ಮಿನ್ ಬಳಕೆದಾರ ಹೆಸರು",
+  login_admin_password_label: "ಅಡ್ಮಿನ್ ಪಾಸ್‌ವರ್ಡ್",
+  login_admin_enter_username: "ಅಡ್ಮಿನ್ ಬಳಕೆದಾರ ಹೆಸರು ನಮೂದಿಸಿ",
+  login_admin_enter_password: "ಅಡ್ಮಿನ್ ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ",
+  login_access_admin: "ಅಡ್ಮಿನ್ ಪ್ಯಾನಲ್ ಪ್ರವೇಶಿಸಿ",
+  login_video_required: "ಕೌಶಲ್ಯ ವೀಡಿಯೊ ಕಡ್ಡಾಯ",
+
+  map_nearby_title: "ಮ್ಯಾಪ್‌ನಲ್ಲಿ ಸಮೀಪದ ಕಾರ್ಮಿಕರು",
+  map_loading: "ಮ್ಯಾಪ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+  map_click_worker: "ಕಾರ್ಮಿಕರ ಕಾರ್ಡ್ ಕ್ಲಿಕ್ ಮಾಡಿ ಅವರ ಸ್ಥಳ ನೋಡಿ",
+  map_workers_on_map: "ಕಾರ್ಮಿಕರು ಮ್ಯಾಪ್‌ನಲ್ಲಿ",
+  map_show_hide: "ಮ್ಯಾಪ್ ತೋರಿಸಿ / ಮರೆಮಾಡಿ",
 };
 
 export const TRANSLATIONS: Record<LangCode, Translations> = {

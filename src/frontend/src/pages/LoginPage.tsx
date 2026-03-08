@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { Translations } from "../utils/translations";
 
 import {
   Briefcase,
@@ -35,6 +36,73 @@ import { useActor } from "../hooks/useActor";
 import { setAuthUser } from "../utils/auth";
 import { sha256Hex } from "../utils/hash";
 import { saveVideoBlob } from "../utils/videoDB";
+
+// ─── PasswordField defined OUTSIDE LoginPage to prevent remount on every render ───
+// memo() prevents re-render when parent re-renders but props haven't changed
+const PasswordField = memo(function PasswordField({
+  id,
+  ocid,
+  value,
+  onChange,
+  show,
+  onToggleShow,
+  error,
+  errorOcid,
+  accentColor = "amber",
+  t,
+}: {
+  id: string;
+  ocid: string;
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  onToggleShow: () => void;
+  error?: string;
+  errorOcid?: string;
+  accentColor?: "amber" | "slate";
+  t: (key: keyof Translations) => string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label
+        htmlFor={id}
+        className="font-body text-sm font-medium text-foreground"
+      >
+        <Lock className={`w-3.5 h-3.5 inline mr-1 text-${accentColor}-600`} />
+        {t("login_password_label")}
+      </Label>
+      <div className="relative">
+        <Input
+          id={id}
+          data-ocid={ocid}
+          type={show ? "text" : "password"}
+          placeholder={t("login_password_placeholder")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="font-body border-border h-11 pr-10"
+          autoComplete="current-password"
+          required
+        />
+        <button
+          type="button"
+          onClick={onToggleShow}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={show ? "Hide password" : "Show password"}
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+      {error && (
+        <p
+          data-ocid={errorOcid}
+          className="text-red-600 text-xs font-body mt-1"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  );
+});
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -80,6 +148,24 @@ export function LoginPage() {
   const [showCitizenPassword, setShowCitizenPassword] = useState(false);
   const [showWorkerPassword, setShowWorkerPassword] = useState(false);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+
+  // Stable callbacks so memo() on PasswordField actually prevents re-renders
+  const handleCitizenPasswordChange = useCallback((v: string) => {
+    setCitizenPassword(v);
+    setCitizenPasswordError("");
+  }, []);
+  const handleWorkerPasswordChange = useCallback((v: string) => {
+    setWorkerPassword(v);
+    setWorkerPasswordError("");
+  }, []);
+  const toggleCitizenPassword = useCallback(
+    () => setShowCitizenPassword((p) => !p),
+    [],
+  );
+  const toggleWorkerPassword = useCallback(
+    () => setShowWorkerPassword((p) => !p),
+    [],
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -417,6 +503,12 @@ export function LoginPage() {
       setWorkerPasswordError("Password must be at least 6 characters.");
       return;
     }
+    if (!workerVideoFile) {
+      toast.error(
+        `${t("login_video_required")}. Please upload your skill video — it is required for registration.`,
+      );
+      return;
+    }
     setWorkerLoading(true);
 
     const name = workerName.trim();
@@ -683,74 +775,6 @@ export function LoginPage() {
     setAdminLoading(false);
   }
 
-  // ─── Shared password field renderer ──────────────────────────────────────────
-  function PasswordField({
-    id,
-    ocid,
-    value,
-    onChange,
-    show,
-    onToggleShow,
-    error,
-    errorOcid,
-    accentColor = "amber",
-  }: {
-    id: string;
-    ocid: string;
-    value: string;
-    onChange: (v: string) => void;
-    show: boolean;
-    onToggleShow: () => void;
-    error?: string;
-    errorOcid?: string;
-    accentColor?: "amber" | "slate";
-  }) {
-    return (
-      <div className="space-y-1.5">
-        <Label
-          htmlFor={id}
-          className="font-body text-sm font-medium text-foreground"
-        >
-          <Lock className={`w-3.5 h-3.5 inline mr-1 text-${accentColor}-600`} />
-          Password
-        </Label>
-        <div className="relative">
-          <Input
-            id={id}
-            data-ocid={ocid}
-            type={show ? "text" : "password"}
-            placeholder="Min 6 characters"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="font-body border-border h-11 pr-10"
-            autoComplete="current-password"
-            required
-          />
-          <button
-            type="button"
-            onClick={onToggleShow}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={show ? "Hide password" : "Show password"}
-          >
-            {show ? (
-              <EyeOff className="w-4 h-4" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-        {error && (
-          <p
-            data-ocid={errorOcid}
-            className="text-red-600 text-xs font-body mt-1"
-          >
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
-
   return (
     <main className="flex-1 min-h-screen flex items-center justify-center relative overflow-hidden">
       {/* Warm gradient background */}
@@ -865,7 +889,7 @@ export function LoginPage() {
                     }`}
                   >
                     <LogIn className="w-4 h-4" />
-                    Login
+                    {t("login_login_btn")}
                   </button>
                   <button
                     type="button"
@@ -881,7 +905,7 @@ export function LoginPage() {
                     }`}
                   >
                     <UserPlus className="w-4 h-4" />
-                    Register
+                    {t("login_register_btn")}
                   </button>
                 </div>
 
@@ -890,8 +914,9 @@ export function LoginPage() {
                   <form onSubmit={handleCitizenLogin} className="space-y-4">
                     <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60 mb-2">
                       <p className="text-amber-800 text-xs font-body">
-                        👋 Welcome back! Enter your username and password to
-                        continue.
+                        👋 {t("login_new_here")} {t("login_login_here")} —{" "}
+                        {t("login_username_label")} &{" "}
+                        {t("login_password_label")}
                       </p>
                     </div>
 
@@ -900,13 +925,13 @@ export function LoginPage() {
                         htmlFor="citizen-login-username"
                         className="font-body text-sm font-medium text-foreground"
                       >
-                        Username
+                        {t("login_username_label")}
                       </Label>
                       <Input
                         id="citizen-login-username"
                         data-ocid="citizen.username.input"
                         type="text"
-                        placeholder="Your username"
+                        placeholder={t("login_username_label")}
                         value={citizenUsername}
                         onChange={(e) => setCitizenUsername(e.target.value)}
                         className="font-body border-border h-11"
@@ -919,14 +944,12 @@ export function LoginPage() {
                       id="citizen-login-password"
                       ocid="citizen.password.input"
                       value={citizenPassword}
-                      onChange={(v) => {
-                        setCitizenPassword(v);
-                        setCitizenPasswordError("");
-                      }}
+                      onChange={handleCitizenPasswordChange}
                       show={showCitizenPassword}
-                      onToggleShow={() => setShowCitizenPassword((p) => !p)}
+                      onToggleShow={toggleCitizenPassword}
                       error={citizenPasswordError}
                       errorOcid="citizen.password.error_state"
+                      t={t}
                     />
 
                     <Button
@@ -938,18 +961,18 @@ export function LoginPage() {
                       {citizenLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Signing in...
+                          {t("login_signing_in")}
                         </>
                       ) : (
                         <>
                           <LogIn className="w-4 h-4 mr-2" />
-                          Login as Citizen
+                          {t("login_login_btn")} — {t("login_im_citizen")}
                         </>
                       )}
                     </Button>
 
                     <p className="text-center text-xs font-body text-amber-700/60">
-                      New here?{" "}
+                      {t("login_new_here")}{" "}
                       <button
                         type="button"
                         onClick={() => {
@@ -958,7 +981,7 @@ export function LoginPage() {
                         }}
                         className="text-amber-700 underline font-semibold hover:text-amber-900"
                       >
-                        Create an account
+                        {t("login_create_account")}
                       </button>
                     </p>
                   </form>
@@ -988,7 +1011,7 @@ export function LoginPage() {
                         htmlFor="citizen-username"
                         className="font-body text-sm font-medium text-foreground"
                       >
-                        Username
+                        {t("login_username_label")}
                       </Label>
                       <Input
                         id="citizen-username"
@@ -1007,14 +1030,12 @@ export function LoginPage() {
                       id="citizen-password"
                       ocid="citizen.password.input"
                       value={citizenPassword}
-                      onChange={(v) => {
-                        setCitizenPassword(v);
-                        setCitizenPasswordError("");
-                      }}
+                      onChange={handleCitizenPasswordChange}
                       show={showCitizenPassword}
-                      onToggleShow={() => setShowCitizenPassword((p) => !p)}
+                      onToggleShow={toggleCitizenPassword}
                       error={citizenPasswordError}
                       errorOcid="citizen.password.error_state"
+                      t={t}
                     />
 
                     <div className="space-y-1.5">
@@ -1057,7 +1078,7 @@ export function LoginPage() {
                     </Button>
 
                     <p className="text-center text-xs font-body text-amber-700/60">
-                      Already registered?{" "}
+                      {t("login_already_registered")}{" "}
                       <button
                         type="button"
                         onClick={() => {
@@ -1066,7 +1087,7 @@ export function LoginPage() {
                         }}
                         className="text-amber-700 underline font-semibold hover:text-amber-900"
                       >
-                        Login here
+                        {t("login_login_here")}
                       </button>
                     </p>
                   </form>
@@ -1091,7 +1112,7 @@ export function LoginPage() {
                     }`}
                   >
                     <LogIn className="w-4 h-4" />
-                    Login
+                    {t("login_login_btn")}
                   </button>
                   <button
                     type="button"
@@ -1107,7 +1128,7 @@ export function LoginPage() {
                     }`}
                   >
                     <UserPlus className="w-4 h-4" />
-                    Register
+                    {t("login_register_btn")}
                   </button>
                 </div>
 
@@ -1116,8 +1137,9 @@ export function LoginPage() {
                   <form onSubmit={handleWorkerLogin} className="space-y-4">
                     <div className="bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200/60 mb-2">
                       <p className="text-amber-800 text-xs font-body">
-                        👋 Welcome back! Enter your username and password to
-                        continue.
+                        👋 {t("login_already_registered")}{" "}
+                        {t("login_login_here")} — {t("login_username_label")} &{" "}
+                        {t("login_password_label")}
                       </p>
                     </div>
 
@@ -1126,13 +1148,13 @@ export function LoginPage() {
                         htmlFor="worker-login-username"
                         className="font-body text-sm font-medium text-foreground"
                       >
-                        Username
+                        {t("login_username_label")}
                       </Label>
                       <Input
                         id="worker-login-username"
                         data-ocid="worker.username.input"
                         type="text"
-                        placeholder="Your username"
+                        placeholder={t("login_username_label")}
                         value={workerUsername}
                         onChange={(e) => setWorkerUsername(e.target.value)}
                         className="font-body border-border h-11"
@@ -1145,14 +1167,12 @@ export function LoginPage() {
                       id="worker-login-password"
                       ocid="worker.password.input"
                       value={workerPassword}
-                      onChange={(v) => {
-                        setWorkerPassword(v);
-                        setWorkerPasswordError("");
-                      }}
+                      onChange={handleWorkerPasswordChange}
                       show={showWorkerPassword}
-                      onToggleShow={() => setShowWorkerPassword((p) => !p)}
+                      onToggleShow={toggleWorkerPassword}
                       error={workerPasswordError}
                       errorOcid="worker.password.error_state"
+                      t={t}
                     />
 
                     <Button
@@ -1164,18 +1184,18 @@ export function LoginPage() {
                       {workerLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Signing in...
+                          {t("login_signing_in")}
                         </>
                       ) : (
                         <>
                           <LogIn className="w-4 h-4 mr-2" />
-                          Login as Worker
+                          {t("login_login_btn")} — {t("login_im_worker")}
                         </>
                       )}
                     </Button>
 
                     <p className="text-center text-xs font-body text-amber-700/60">
-                      New here?{" "}
+                      {t("login_new_here")}{" "}
                       <button
                         type="button"
                         onClick={() => {
@@ -1184,7 +1204,7 @@ export function LoginPage() {
                         }}
                         className="text-amber-700 underline font-semibold hover:text-amber-900"
                       >
-                        Register as a worker
+                        {t("login_register_btn")}
                       </button>
                     </p>
                   </form>
@@ -1215,7 +1235,7 @@ export function LoginPage() {
                         htmlFor="worker-username"
                         className="font-body text-sm font-medium text-foreground"
                       >
-                        Username
+                        {t("login_username_label")}
                       </Label>
                       <Input
                         id="worker-username"
@@ -1234,14 +1254,12 @@ export function LoginPage() {
                       id="worker-password"
                       ocid="worker.password.input"
                       value={workerPassword}
-                      onChange={(v) => {
-                        setWorkerPassword(v);
-                        setWorkerPasswordError("");
-                      }}
+                      onChange={handleWorkerPasswordChange}
                       show={showWorkerPassword}
-                      onToggleShow={() => setShowWorkerPassword((p) => !p)}
+                      onToggleShow={toggleWorkerPassword}
                       error={workerPasswordError}
                       errorOcid="worker.password.error_state"
+                      t={t}
                     />
 
                     <div className="space-y-1.5">
@@ -1324,13 +1342,14 @@ export function LoginPage() {
                       />
                     </div>
 
-                    {/* Video Upload */}
+                    {/* Video Upload — REQUIRED */}
                     <div className="space-y-1.5">
                       <Label className="font-body text-sm font-medium text-foreground">
                         <Video className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
                         {t("login_video_profile")}{" "}
-                        <span className="text-muted-foreground font-normal">
-                          ({t("login_optional")})
+                        <span className="text-red-500 font-bold">*</span>{" "}
+                        <span className="text-red-500 text-xs font-normal">
+                          ({t("login_video_required")})
                         </span>
                       </Label>
                       <input
@@ -1367,14 +1386,15 @@ export function LoginPage() {
                           type="button"
                           data-ocid="worker.video.upload_button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="w-full h-20 border-2 border-dashed border-amber-300 rounded-lg flex flex-col items-center justify-center gap-1.5 text-amber-600 hover:border-amber-500 hover:bg-amber-50 transition-all group"
+                          className="w-full h-20 border-2 border-dashed border-red-300 rounded-lg flex flex-col items-center justify-center gap-1.5 text-amber-600 hover:border-amber-500 hover:bg-amber-50 transition-all group"
                         >
                           <Upload className="w-5 h-5 group-hover:scale-110 transition-transform" />
                           <span className="text-sm font-body font-medium">
                             {t("login_upload_video")}
                           </span>
-                          <span className="text-xs font-body text-amber-500">
-                            MP4 supported · {t("login_video_formats")}
+                          <span className="text-xs font-body text-red-400 font-medium">
+                            ⚠ {t("login_video_required")} ·{" "}
+                            {t("login_video_formats")}
                           </span>
                         </button>
                       )}
@@ -1400,7 +1420,7 @@ export function LoginPage() {
                     </Button>
 
                     <p className="text-center text-xs font-body text-amber-700/60">
-                      Already registered?{" "}
+                      {t("login_already_registered")}{" "}
                       <button
                         type="button"
                         onClick={() => {
@@ -1409,7 +1429,7 @@ export function LoginPage() {
                         }}
                         className="text-amber-700 underline font-semibold hover:text-amber-900"
                       >
-                        Login here
+                        {t("login_login_here")}
                       </button>
                     </p>
                   </form>
@@ -1422,7 +1442,7 @@ export function LoginPage() {
                   <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
                     <Shield className="w-4 h-4 text-slate-600 shrink-0" />
                     <p className="text-slate-700 text-xs font-body">
-                      Admin access only. Restricted to authorized personnel.
+                      {t("login_admin_access")}
                     </p>
                   </div>
 
@@ -1431,13 +1451,13 @@ export function LoginPage() {
                       htmlFor="admin-username"
                       className="font-body text-sm font-medium text-foreground"
                     >
-                      Admin Username
+                      {t("login_admin_username_label")}
                     </Label>
                     <Input
                       id="admin-username"
                       data-ocid="admin.username.input"
                       type="text"
-                      placeholder="Enter admin username"
+                      placeholder={t("login_admin_enter_username")}
                       value={adminUsername}
                       onChange={(e) => setAdminUsername(e.target.value)}
                       className="font-body border-border h-11"
@@ -1452,14 +1472,14 @@ export function LoginPage() {
                       className="font-body text-sm font-medium text-foreground"
                     >
                       <Lock className="w-3.5 h-3.5 inline mr-1 text-slate-600" />
-                      Admin Password
+                      {t("login_admin_password_label")}
                     </Label>
                     <div className="relative">
                       <Input
                         id="admin-password"
                         data-ocid="admin.password.input"
                         type={showAdminPassword ? "text" : "password"}
-                        placeholder="Enter admin password"
+                        placeholder={t("login_admin_enter_password")}
                         value={adminPassword}
                         onChange={(e) => setAdminPassword(e.target.value)}
                         className="font-body border-border h-11 pr-10"
@@ -1492,12 +1512,12 @@ export function LoginPage() {
                     {adminLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Authenticating...
+                        {t("login_authenticating")}
                       </>
                     ) : (
                       <>
                         <Shield className="w-4 h-4 mr-2" />
-                        Access Admin Panel
+                        {t("login_access_admin")}
                       </>
                     )}
                   </Button>

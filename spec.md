@@ -1,27 +1,54 @@
-# KNOT
+# KNOT – Manual Deploy Conversion
 
 ## Current State
-Full-stack vocational networking app with worker/citizen login, video portfolios (stored in IndexedDB), peer endorsements, trust badge system, multilingual support (EN/TE/HI/ML/KN), voice search, skill certification test, and certificate generation. Backend is Motoko on ICP.
+Full-stack app on Caffeine/ICP with:
+- Motoko backend (ICP canister) with all data models: User, Citizen, LearningRequest, CertificationResult, PracticalVideoSubmission, WorkerCredential, CitizenCredential, VideoEntry
+- React + TypeScript + Tailwind CSS frontend using ICP actor calls via `useActor()` hook
+- All business logic: auth (worker/citizen/admin), video upload (IndexedDB + base64 + ICP backend), peer certification flow (MCQ test → practical video → admin approval → certificate), endorsements, learning requests, notifications, multilingual (5 languages), Leaflet map, voice search, pop-up ads, admin dashboard
 
 ## Requested Changes (Diff)
 
 ### Add
-- `findWorkerByName(name: Text, skill: Text)` backend query to look up existing worker by name + skill for re-login
-- `findCitizenByName(name: Text)` backend query to look up existing citizen by name for re-login
-- Multilingual question banks for the certification test (TE, HI, ML, KN translations of all 9 MCQ questions and options + practical task description)
-- Worker name stored in IndexedDB mapped to their backend ID, so video can be retrieved correctly when re-logging in
+- `/backend` folder: Node.js + Express server (`server.js`) with all API endpoints matching Motoko logic
+- `/backend/db.json`: flat-file mock database storing all runtime data
+- `/backend/routes/`: separate route files for users, citizens, certification, admin
+- `/backend/utils/`: badge calculation, ranking, hash helpers
+- CORS support so frontend can call the backend
+- `/backend/package.json` with Express, cors, fs dependencies
+- Vite proxy config in frontend so `API_BASE_URL` works in dev and production
+- New `src/frontend/src/utils/api.ts`: thin REST client replacing `useActor()` and `backend.d.ts` ICP calls
+- Frontend environment variable `VITE_API_URL` to configure backend URL
 
 ### Modify
-- **LoginPage**: on "Register as Worker" / "Enter as Citizen" — first check if a worker/citizen with the same name already exists (via new backend lookup), and if so, re-use that profile ID instead of creating a duplicate. Show "Welcome back!" toast for returning users.
-- **CertificationTestPage**: `getQuestionBank()` now accepts both `skill` AND `lang` parameters and returns translated questions/options/practical descriptions for TE, HI, ML, KN. The `speakText` call already reads in the selected language — questions must be in that language too.
-- **WorkerDashboardPage / ProfilePage**: When looking up the video in IndexedDB, also check a `knot_worker_name_index` key in localStorage that maps `workerName → workerId`, so re-logins retrieve the correct video.
+- `src/frontend/src/hooks/useActor.ts` → replaced with a no-op / stub (actor is gone, API calls go through api.ts)
+- `src/frontend/src/hooks/useQueries.ts` → replace all `actor.*` calls with `api.*` REST calls
+- `src/frontend/src/pages/LoginPage.tsx` → replace `actor.registerWorker`, `actor.loginWorker`, `actor.loginCitizen`, `actor.loginAdmin`, `actor.findWorkerByName`, `actor.findCitizenByName`, `actor.saveWorkerVideo` with `api.*` equivalents
+- `src/frontend/src/pages/WorkerDashboardPage.tsx` → replace actor calls with api calls
+- `src/frontend/src/pages/ProfilePage.tsx` → replace actor calls with api calls
+- `src/frontend/src/pages/AdminDashboardPage.tsx` → replace actor calls with api calls
+- `src/frontend/src/pages/CertificationTestPage.tsx` → replace actor calls with api calls
+- `src/frontend/src/pages/CertificatePage.tsx` → replace actor calls with api calls
+- `src/frontend/src/App.tsx` → remove AppInitializer ICP clear logic, remove useActor import
+- `src/frontend/src/backend.d.ts` + `src/frontend/src/backend.ts` → replace with REST types
+- All `bigint` IDs in frontend converted to `number` (Express JSON doesn't handle bigint)
+- `vite.config.js` → add proxy for `/api` to localhost:3001 in dev
+- Root `package.json` → add scripts to run both backend + frontend
 
 ### Remove
-- Nothing removed
+- `useActor` / ICP actor integration
+- `src/frontend/src/hooks/useInternetIdentity.ts` (ICP-specific)
+- `src/frontend/src/declarations/` folder (ICP-generated)
+- `AppInitializer` component that called `actor.clearAllData()` on ICP
+- All `BigInt()` conversions (backend uses plain numbers)
 
 ## Implementation Plan
-1. Add `findWorkerByName` and `findCitizenByName` query functions to `main.mo`
-2. Update `backend.d.ts` to expose the new functions
-3. Update `LoginPage.tsx`: before registering, call `searchUsers(name)` / `findCitizenByName(name)` to check for existing profile; if found, set that ID and skip registration
-4. Update `CertificationTestPage.tsx`: add full TE/HI/ML/KN translations of question text and options; pass `lang` into `getQuestionBank`
-5. Update `LoginPage.tsx` + `WorkerDashboardPage.tsx` + `ProfilePage.tsx`: store/retrieve a `workerName → id` mapping in localStorage so the right video is fetched after re-login
+1. Create `/backend/package.json`, `/backend/server.js`, `/backend/db.json`, route files, utils
+2. Replace `backend.d.ts` with plain TS types (number instead of bigint)
+3. Create `src/frontend/src/utils/api.ts` with all REST call wrappers
+4. Replace `useActor` hook with a stub / remove ICP dependencies
+5. Update `useQueries.ts` to use api.ts instead of actor
+6. Update all pages (Login, WorkerDashboard, Profile, Admin, CertificationTest, Certificate)
+7. Update `App.tsx` to remove AppInitializer and ICP imports
+8. Update `vite.config.js` with proxy
+9. Update root `package.json` with concurrently dev/start scripts
+10. Validate build passes

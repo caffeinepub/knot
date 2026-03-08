@@ -7,12 +7,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Link } from "@tanstack/react-router";
-import { Award, MapPin, RefreshCw, TrendingUp, Users } from "lucide-react";
+import {
+  Award,
+  Map as MapIcon,
+  MapPin,
+  RefreshCw,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { CardSkeletonGrid } from "../components/CardSkeleton";
 import { BannerAd, PopupAd } from "../components/PopupAd";
 import { UserCard } from "../components/UserCard";
 import { VoiceSearch } from "../components/VoiceSearch";
+import { WorkerMap } from "../components/WorkerMap";
 import { useLang } from "../contexts/LanguageContext";
 import {
   useAllUsers,
@@ -39,6 +47,7 @@ export function HomePage() {
   const [selectedDistance, setSelectedDistance] = useState(
     isCitizen ? "10" : "all",
   );
+  const [showMap, setShowMap] = useState(false);
 
   const {
     data: allUsers,
@@ -109,6 +118,13 @@ export function HomePage() {
 
   const voiceLang =
     LANGUAGE_OPTIONS.find((o) => o.code === lang)?.bcp47 ?? "en-IN";
+
+  // Compute map centre for the WorkerMap component
+  const mapCentre = useMemo(() => {
+    if (isCitizen && authUser?.address) return authUser.address;
+    if (filteredUsers.length > 0) return filteredUsers[0].location;
+    return "India";
+  }, [isCitizen, authUser, filteredUsers]);
 
   return (
     <main className="flex-1">
@@ -233,6 +249,22 @@ export function HomePage() {
                   ))}
                 </SelectContent>
               </Select>
+              <button
+                type="button"
+                data-ocid="home.map.toggle"
+                onClick={() => setShowMap((v) => !v)}
+                className={`h-11 px-3 rounded-lg border font-body text-sm font-medium flex items-center gap-1.5 transition-all shrink-0 ${
+                  showMap
+                    ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                    : "bg-card text-muted-foreground border-border hover:border-amber-400 hover:text-amber-700"
+                }`}
+                title={t("map_show_hide")}
+              >
+                <MapIcon className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">
+                  {t("map_show_hide")}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -255,6 +287,19 @@ export function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Nearby Map Section */}
+      {showMap && (
+        <WorkerMap
+          workers={filteredUsers}
+          centre={mapCentre}
+          onClose={() => setShowMap(false)}
+          workersLabel={t("map_workers_on_map")}
+          hideLabel={t("map_show_hide")}
+          nearbyTitle={t("map_nearby_title")}
+          activeSkill={selectedSkill}
+        />
+      )}
 
       {/* Feed */}
       <div className="container mx-auto px-4 py-8">
